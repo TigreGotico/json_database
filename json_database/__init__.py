@@ -13,6 +13,7 @@ from json_database.utils import DummyLock, load_commented_json, merge_dict, \
     jsonify_recursively, get_key_recursively, get_key_recursively_fuzzy, \
     get_value_recursively_fuzzy, get_value_recursively
 from json_database.xdg_utils import xdg_cache_home, xdg_data_home, xdg_config_home
+from json_database.crypto import decrypt_from_json, encrypt_as_json
 
 LOG = logging.getLogger("JsonDatabase")
 LOG.setLevel("INFO")
@@ -102,6 +103,39 @@ class JsonStorage(dict):
         except Exception as e:
             LOG.error(e)
             raise SessionError
+
+
+class EncryptedJsonStorage(JsonStorage):
+    """persistent python dict, stored AES encrypted to file"""
+
+    def __init__(self, encrypt_key: str, path: str, disable_lock=False):
+        self.encrypt_key = encrypt_key
+        super().__init__(path, disable_lock)
+
+    def load_local(self, path):
+        """
+            Load local json file into self.
+
+            Args:
+                path (str): file to load
+        """
+        super().load_local(path)
+        # decrypt after load
+        decrypted = decrypt_from_json(self.encrypt_key, dict(self))
+        self.clear()
+        self.update(decrypted)
+
+    def store(self, path=None):
+        """
+            store the json db locally.
+        """
+        decrypted = dict(self)
+        encrypted = encrypt_as_json(self.encrypt_key, dict(self))
+        self.clear()
+        self.update(encrypted)  # encrypt before storage
+        super().store()
+        self.clear()
+        self.update(decrypted)  # keep it decrypted in memory
 
 
 class JsonDatabase(dict):
@@ -293,6 +327,22 @@ class JsonStorageXDG(JsonStorage):
         self.name = name
         path = join(xdg_folder, subfolder, f"{name}.{extension}")
         super().__init__(path, disable_lock=disable_lock)
+
+
+class EncryptedJsonStorageXDG(EncryptedJsonStorage):
+    """ xdg respectful persistent dicts """
+
+    def __init__(self,
+                 encrypt_key: str,
+                 name: str,
+                 xdg_folder=xdg_data_home(),
+                 disable_lock=False,
+                 subfolder="json_database",
+                 extension="ejson"):
+        self.name = name
+        path = join(xdg_folder, subfolder, f"{name}.{extension}")
+        super().__init__(encrypt_key=encrypt_key, path=path,
+                         disable_lock=disable_lock)
 
 
 class JsonDatabaseXDG(JsonDatabase):
