@@ -12,3 +12,11 @@ class SessionError(RuntimeError):
 
 class MatchError(ValueError):
     """ could not match an item in db """
+
+
+class DecryptionKeyError(KeyError):
+    """ Could not decrypt payload """
+
+
+class EncryptionKeyError(KeyError):
+    """ Could not encrypt payload """
