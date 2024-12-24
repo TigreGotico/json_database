@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from os import makedirs, remove
 from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
@@ -7,6 +8,7 @@ from tempfile import gettempdir
 
 from combo_lock import ComboLock
 
+from json_database.crypto import decrypt_from_json, encrypt_as_json
 from json_database.exceptions import InvalidItemID, DatabaseNotCommitted, \
     SessionError, MatchError
 from json_database.utils import DummyLock, load_commented_json, merge_dict, \
@@ -102,6 +104,41 @@ class JsonStorage(dict):
         except Exception as e:
             LOG.error(e)
             raise SessionError
+
+
+class EncryptedJsonStorage(JsonStorage):
+    """persistent python dict, stored AES encrypted to file"""
+
+    def __init__(self, encrypt_key: str, path: str, disable_lock=False):
+        assert len(encrypt_key) == 16
+        self.encrypt_key = encrypt_key
+        super().__init__(path, disable_lock)
+
+    def load_local(self, path):
+        """
+            Load local json file into self.
+
+            Args:
+                path (str): file to load
+        """
+        super().load_local(path)
+        # decrypt after load
+        if self:
+            decrypted = json.loads(decrypt_from_json(self.encrypt_key, dict(self)))
+            self.clear()
+            self.update(decrypted)
+
+    def store(self, path=None):
+        """
+            store the json db locally.
+        """
+        decrypted = dict(self)
+        encrypted = json.loads(encrypt_as_json(self.encrypt_key, decrypted))
+        self.clear()
+        self.merge(encrypted)  # encrypt before storage
+        super().store()
+        self.clear()
+        self.update(decrypted)  # keep it decrypted in memory
 
 
 class JsonDatabase(dict):
@@ -295,6 +332,22 @@ class JsonStorageXDG(JsonStorage):
         super().__init__(path, disable_lock=disable_lock)
 
 
+class EncryptedJsonStorageXDG(EncryptedJsonStorage):
+    """ xdg respectful persistent dicts """
+
+    def __init__(self,
+                 encrypt_key: str,
+                 name: str,
+                 xdg_folder=xdg_data_home(),
+                 disable_lock=False,
+                 subfolder="json_database",
+                 extension="ejson"):
+        self.name = name
+        path = join(xdg_folder, subfolder, f"{name}.{extension}")
+        super().__init__(encrypt_key=encrypt_key, path=path,
+                         disable_lock=disable_lock)
+
+
 class JsonDatabaseXDG(JsonDatabase):
     """ xdg respectful json database """
 
@@ -312,3 +365,23 @@ class JsonConfigXDG(JsonStorageXDG):
                  disable_lock=False, subfolder="json_database",
                  extension="json"):
         super().__init__(name, xdg_folder, disable_lock, subfolder, extension)
+
+
+if __name__ == "__main__":
+    # quick test
+    os.remove("/tmp/test.json")
+    db = EncryptedJsonStorage("S" * 16, "/tmp/test.json")
+    db["A"] = "42"
+    print(db)  # {'A': '42'} - not encrypted in memory
+    db.store()
+    print(db)  # {'A': '42'} - still decrypted
+    db.reload()
+    print(db)  # {'A': '42'} - still decrypted
+    db = EncryptedJsonStorage("S" * 16, "/tmp/test.json")
+    print(db)  # {'A': '42'} - still not encrypted
+
+    db = JsonStorage("/tmp/test.json")
+    print(db)  # encrypted
+    # {'ciphertext': 'ad0da72dc412d6b1240e478560354893d62caf',
+    # 'tag': '3bc39dbfad7b0d7e50f3e652ee341819',
+    # 'nonce': '3020ddafc9853e7686ee0368f9be6e25'}
