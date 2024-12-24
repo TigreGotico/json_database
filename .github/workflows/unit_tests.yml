@@ -57,15 +57,3 @@ jobs:
       - name: Run unittests
         run: |
           pytest --cov=json_database --cov-report xml test
-      - name: Upload coverage
-        env:
-          CODECOV_TOKEN: ${{secrets.CODECOV_TOKEN}}
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./coverage/reports/
-          fail_ci_if_error: true
-          files: ./coverage.xml,!./cache
-          flags: unittests
-          name: codecov-unittests
-          verbose: true
