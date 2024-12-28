@@ -1,14 +1,12 @@
 # Changelog
 
-## [0.8.0a1](https://github.com/TigreGotico/json_database/tree/0.8.0a1) (2024-12-24)
+## [0.9.0a1](https://github.com/TigreGotico/json_database/tree/0.9.0a1) (2024-12-28)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.7.0...0.8.0a1)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.8.1...0.9.0a1)
 
 **Merged pull requests:**
 
-- feat: encrypted database [\#5](https://github.com/TigreGotico/json_database/pull/5) ([JarbasAl](https://github.com/JarbasAl))
-- feat:semver [\#4](https://github.com/TigreGotico/json_database/pull/4) ([JarbasAl](https://github.com/JarbasAl))
-- Update requirements.txt [\#3](https://github.com/TigreGotico/json_database/pull/3) ([JarbasAl](https://github.com/JarbasAl))
+- feat: hivemind-plugin-manager [\#7](https://github.com/TigreGotico/json_database/pull/7) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
