@@ -82,5 +82,5 @@ class JsonDB(AbstractDB):
             self._db.store()
             return True
         except Exception as e:
-            LOG.error(f"Failed to save {self._db.path}")
+            LOG.error(f"Failed to save {self._db.path} - {e}")
             return False
