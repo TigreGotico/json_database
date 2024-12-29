@@ -20,7 +20,13 @@ For those times when you need something simple and sql is overkill
 pip install json_database
 ```
 
-## Usage
+
+## 📡 HiveMind Integration
+
+This project includes a native [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager) integration, providing seamless interoperability with the HiveMind ecosystem.
+- **Database Plugin**: Provides `hivemind-json-db-plugin` allowing to use JSON-based storage for client credentials and permissions
+  
+## 🐍 Usage
 
 
 ### JsonStorage
