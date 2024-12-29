@@ -11,9 +11,18 @@ class JsonDB(AbstractDB):
     """HiveMind Database implementation using JSON files."""
     name: str = "clients"
     subfolder: str = "hivemind-core"
+    password: Optional[str] = None
 
     def __post_init__(self):
-        self._db = JsonStorageXDG(self.name, subfolder=self.subfolder, xdg_folder=xdg_data_home())
+        if self.password:
+            self._db = EncryptedJsonStorageXDG(encrypt_key=self.password,
+                                               name=self.name,
+                                               subfolder=self.subfolder,
+                                               xdg_folder=xdg_data_home())
+        else:
+            self._db = JsonStorageXDG(self.name, 
+                                      subfolder=self.subfolder, 
+                                      xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
     def sync(self):
