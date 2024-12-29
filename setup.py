@@ -56,6 +56,9 @@ def get_description():
     return long_description
 
 
+PLUGIN_ENTRY_POINT = 'hivemind-json-db-plugin=json_database.hpm:JsonDB'
+
+
 setup(
     name='json_database',
     version=get_version(),
@@ -68,6 +71,7 @@ setup(
     author_email='jarbasai@mailfence.com',
     install_requires=required('requirements.txt'),
     description='searchable json database with persistence',
+    entry_points={'hivemind.database': PLUGIN_ENTRY_POINT},
     long_description=get_description(),
-    long_description_content_type="text/markdown",
+    long_description_content_type="text/markdown"
 )

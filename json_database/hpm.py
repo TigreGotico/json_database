@@ -3,13 +3,17 @@ from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
 from typing import Union, Iterable, List
 from json_database import JsonStorageXDG
+from dataclasses import dataclass
 
 
+@dataclass
 class JsonDB(AbstractDB):
     """HiveMind Database implementation using JSON files."""
+    name: str = "clients"
+    subfolder: str = "hivemind-core"
 
-    def __init__(self, name="clients", subfolder="hivemind-core"):
-        self._db = JsonStorageXDG(name, subfolder=subfolder, xdg_folder=xdg_data_home())
+    def __post_init__(self):
+        self._db = JsonStorageXDG(self.name, subfolder=self.subfolder, xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
     def sync(self):

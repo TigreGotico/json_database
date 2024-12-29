@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.9.0a1](https://github.com/TigreGotico/json_database/tree/0.9.0a1) (2024-12-28)
+## [0.9.1a1](https://github.com/TigreGotico/json_database/tree/0.9.1a1) (2024-12-29)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.8.1...0.9.0a1)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.9.0...0.9.1a1)
 
 **Merged pull requests:**
 
-- feat: hivemind-plugin-manager [\#7](https://github.com/TigreGotico/json_database/pull/7) ([JarbasAl](https://github.com/JarbasAl))
+- fix: add hivemind entrypoint to setup.py [\#9](https://github.com/TigreGotico/json_database/pull/9) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
