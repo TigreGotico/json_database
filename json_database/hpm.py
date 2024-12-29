@@ -1,8 +1,8 @@
 from hivemind_plugin_manager.database import Client, AbstractDB, cast2client
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
-from typing import Union, Iterable, List
-from json_database import JsonStorageXDG
+from typing import Union, Iterable, List, Optional
+from json_database import JsonStorageXDG, EncryptedJsonStorageXD
 from dataclasses import dataclass
 
 
@@ -11,9 +11,18 @@ class JsonDB(AbstractDB):
     """HiveMind Database implementation using JSON files."""
     name: str = "clients"
     subfolder: str = "hivemind-core"
+    password: Optional[str] = None
 
     def __post_init__(self):
-        self._db = JsonStorageXDG(self.name, subfolder=self.subfolder, xdg_folder=xdg_data_home())
+        if self.password:
+            self._db = EncryptedJsonStorageXDG(encrypt_key=self.password,
+                                               name=self.name,
+                                               subfolder=self.subfolder,
+                                               xdg_folder=xdg_data_home())
+        else:
+            self._db = JsonStorageXDG(self.name, 
+                                      subfolder=self.subfolder, 
+                                      xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
     def sync(self):
