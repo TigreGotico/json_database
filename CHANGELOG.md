@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.9.1a1](https://github.com/TigreGotico/json_database/tree/0.9.1a1) (2024-12-29)
+## [0.10.0a1](https://github.com/TigreGotico/json_database/tree/0.10.0a1) (2024-12-29)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.9.0...0.9.1a1)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.9.1...0.10.0a1)
 
 **Merged pull requests:**
 
-- fix: add hivemind entrypoint to setup.py [\#9](https://github.com/TigreGotico/json_database/pull/9) ([JarbasAl](https://github.com/JarbasAl))
+- feat: hpm encrypted db [\#11](https://github.com/TigreGotico/json_database/pull/11) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
