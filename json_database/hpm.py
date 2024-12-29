@@ -1,8 +1,8 @@
 from hivemind_plugin_manager.database import Client, AbstractDB, cast2client
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
-from typing import Union, Iterable, List
-from json_database import JsonStorageXDG
+from typing import Union, Iterable, List, Optional
+from json_database import JsonStorageXDG, EncryptedJsonStorageXD
 from dataclasses import dataclass
 
 
