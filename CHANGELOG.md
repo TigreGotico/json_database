@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.10.0a1](https://github.com/TigreGotico/json_database/tree/0.10.0a1) (2024-12-29)
+## [0.10.1a1](https://github.com/TigreGotico/json_database/tree/0.10.1a1) (2024-12-29)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.9.1...0.10.0a1)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.0...0.10.1a1)
 
 **Merged pull requests:**
 
-- feat: hpm encrypted db [\#11](https://github.com/TigreGotico/json_database/pull/11) ([JarbasAl](https://github.com/JarbasAl))
+- fix:typo in hpm import [\#13](https://github.com/TigreGotico/json_database/pull/13) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
