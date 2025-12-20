@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.10.1a1](https://github.com/TigreGotico/json_database/tree/0.10.1a1) (2024-12-29)
+## [0.10.2a1](https://github.com/TigreGotico/json_database/tree/0.10.2a1) (2025-12-20)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.0...0.10.1a1)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.1...0.10.2a1)
 
 **Merged pull requests:**
 
-- fix:typo in hpm import [\#13](https://github.com/TigreGotico/json_database/pull/13) ([JarbasAl](https://github.com/JarbasAl))
+- chore: Configure Renovate [\#15](https://github.com/TigreGotico/json_database/pull/15) ([renovate[bot]](https://github.com/apps/renovate))
 
 
 
