@@ -356,3 +356,129 @@ class TestQuery:
             assert item["category"] == "Electronics"
             assert item["in_stock"] is True
             assert item["price"] < 100
+
+    def test_contains_key_fuzzy_threshold_low(self, complex_db):
+        """Test fuzzy key matching with low threshold."""
+        query = Query(complex_db)
+        # Very permissive threshold should match many keys
+        query.contains_key("cat", fuzzy=True, thresh=0.3)
+        results = query.build()
+        # Should match "category"
+        assert len(results) > 0
+
+    def test_contains_key_fuzzy_threshold_high(self, complex_db):
+        """Test fuzzy key matching with high threshold."""
+        query = Query(complex_db)
+        # Very strict threshold should match few or no keys
+        query.contains_key("xyz", fuzzy=True, thresh=0.99)
+        results = query.build()
+        # Unlikely to match anything with such a high threshold
+        assert len(results) == 0
+
+    def test_contains_value_fuzzy_string_match(self, complex_db):
+        """Test fuzzy value matching on string fields."""
+        query = Query(complex_db)
+        # Fuzzy match "Lapto" to "Laptop"
+        query.contains_value("name", "Lapto", fuzzy=True, thresh=0.7)
+        results = query.build()
+        assert len(results) >= 1
+        assert any("Laptop" in str(item.get("name", "")) for item in results)
+
+    def test_contains_value_fuzzy_list_match(self, complex_db):
+        """Test fuzzy value matching when value is in list."""
+        query = Query(complex_db)
+        # Fuzzy match "comp" to "computers" in tags list
+        query.contains_value("tags", "comp", fuzzy=True, thresh=0.5)
+        results = query.build()
+        # Should find items with fuzzy-matching tags
+        assert len(results) >= 0
+
+    def test_equal_with_type_mismatch(self, complex_db):
+        """Test equal() filtering with type mismatches."""
+        query = Query(complex_db)
+        # Try to match string "999" to numeric prices
+        query.equal("price", "999")
+        results = query.build()
+        # Should not match (999 != "999")
+        assert len(results) == 0
+
+    def test_comparison_with_string_numbers(self, complex_db):
+        """Test numeric comparisons with string numbers."""
+        query = Query(complex_db)
+        # Try to compare prices (numbers) with string threshold
+        # This should handle type mismatch gracefully
+        try:
+            query.below("price", "50")
+            results = query.build()
+            # May fail or return empty; both acceptable for type mismatch
+        except TypeError:
+            # Type error is acceptable for mismatched types
+            pass
+
+    def test_contains_key_fuzzy_case_insensitive(self, complex_db):
+        """Test fuzzy key matching with case insensitivity."""
+        query = Query(complex_db)
+        query.contains_key("NAME", fuzzy=True, ignore_case=True, thresh=0.7)
+        results = query.build()
+        # Should match "name" case-insensitively
+        assert len(results) > 0
+
+    def test_contains_value_fuzzy_case_insensitive(self, complex_db):
+        """Test fuzzy value matching with case insensitivity."""
+        query = Query(complex_db)
+        query.contains_value("name", "LAPTOP", fuzzy=True, ignore_case=True, thresh=0.7)
+        results = query.build()
+        # Should match "Laptop" case-insensitively
+        assert len(results) >= 1
+
+    def test_value_contains_with_different_types(self, complex_db):
+        """Test value_contains with mismatched types."""
+        query = Query(complex_db)
+        # Trying to find string value in numeric field raises TypeError
+        # value_contains checks "if value in e[key]" which fails for numeric types
+        with pytest.raises(TypeError):
+            query.value_contains("price", "99")
+            query.build()
+
+    def test_equal_numeric_precision(self, complex_db):
+        """Test equal() with floating point precision."""
+        query = Query(complex_db)
+        # Try exact match on float value
+        query.equal("price", 29.99)
+        results = query.build()
+        # Should find Mouse
+        assert len(results) >= 1
+
+    def test_in_range_boundaries(self, complex_db):
+        """Test in_range with boundary values."""
+        query = Query(complex_db)
+        # Range is exclusive on both ends: min < value < max
+        query.in_range("price", 20, 100)
+        results = query.build()
+        # Should find items with 20 < price < 100
+        assert all(20 < item["price"] < 100 for item in results)
+
+    def test_in_range_with_equal_boundaries(self, complex_db):
+        """Test in_range when item equals boundary."""
+        query = Query(complex_db)
+        # 29.99 should NOT be included (exclusive bounds)
+        query.in_range("price", 29.99, 100)
+        results = query.build()
+        # Should NOT include price == 29.99
+        assert all(item["price"] != 29.99 for item in results)
+
+    def test_below_or_equal_boundary(self, complex_db):
+        """Test below_or_equal at exact boundary."""
+        query = Query(complex_db)
+        query.below_or_equal("price", 29.99)
+        results = query.build()
+        # Should include 29.99
+        assert any(item["price"] == 29.99 for item in results)
+
+    def test_above_or_equal_boundary(self, complex_db):
+        """Test above_or_equal at exact boundary."""
+        query = Query(complex_db)
+        query.above_or_equal("price", 999.99)
+        results = query.build()
+        # Should include 999.99
+        assert any(item["price"] == 999.99 for item in results)

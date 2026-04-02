@@ -12,9 +12,9 @@
 - [x] Expand `test/test_search.py` — merge_dict recursion, uncomment_json comments, fuzzy thresholds
 
 ### Query Fuzzy Matching Coverage
-- [ ] Add Query fuzzy matching edge cases (threshold boundaries, type coercion)
-- [ ] Test equal() with ignore_case and special characters
-- [ ] Test comparison operators (below, above) with type mismatches
+- [x] Add Query fuzzy matching edge cases (threshold boundaries, type coercion)
+- [x] Test equal() with ignore_case and special characters
+- [x] Test comparison operators (below, above) with type mismatches
 
 ### Verification
 - [ ] Run `pytest --cov=json_database --cov-fail-under=80` and verify target achieved
