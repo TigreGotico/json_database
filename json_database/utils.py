@@ -158,7 +158,7 @@ def uncomment_json(commented_json_str):
             continue
         nocomment.append(line)
 
-    return " ".join(nocomment)
+    return "\n".join(nocomment)
 
 
 def is_jsonifiable(thing):
