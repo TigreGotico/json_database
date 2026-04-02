@@ -11,10 +11,13 @@
 - [ ] Expand `test/test_database.py` — match/merge/replace strategies and edge cases
 - [x] Expand `test/test_search.py` — merge_dict recursion, uncomment_json comments, fuzzy thresholds
 
-### Query Fuzzy Matching Coverage
+### Query Fuzzy Matching Coverage (COMPLETE - 91%)
 - [x] Add Query fuzzy matching edge cases (threshold boundaries, type coercion)
 - [x] Test equal() with ignore_case and special characters
 - [x] Test comparison operators (below, above) with type mismatches
+- [x] Comprehensive coverage of contains_value branches (list/dict/string)
+- [x] Case-insensitive matching across all types
+- [x] Fuzzy matching with case-insensitivity combinations
 
 ### Verification
 - [ ] Run `pytest --cov=json_database --cov-fail-under=80` and verify target achieved

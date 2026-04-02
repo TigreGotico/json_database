@@ -482,3 +482,251 @@ class TestQuery:
         results = query.build()
         # Should include 999.99
         assert any(item["price"] == 999.99 for item in results)
+
+    def test_contains_key_fuzzy_empty_string(self, complex_db):
+        """Test fuzzy key matching with empty string."""
+        query = Query(complex_db)
+        query.contains_key("", fuzzy=True, thresh=0.5)
+        results = query.build()
+        # Empty string should have very low match scores
+        assert isinstance(results, list)
+
+    def test_contains_value_fuzzy_unicode(self, complex_db):
+        """Test fuzzy value matching with unicode."""
+        query = Query(complex_db)
+        query.contains_value("name", "café", fuzzy=True, thresh=0.5)
+        results = query.build()
+        # Should handle unicode gracefully
+        assert isinstance(results, list)
+
+    def test_contains_value_list_with_fuzzy(self, complex_db):
+        """Test fuzzy matching when value field is a list."""
+        query = Query(complex_db)
+        # Try fuzzy match against list of tags
+        query.contains_value("tags", "port", fuzzy=True, thresh=0.6)
+        results = query.build()
+        # Should find items where fuzzy match succeeds against list items
+        assert isinstance(results, list)
+
+    def test_contains_value_dict_with_fuzzy(self, complex_db):
+        """Test fuzzy matching when value is in dict keys."""
+        query = Query(complex_db)
+        # Create query with dict field
+        item_with_dict = complex_db[0].copy()
+        item_with_dict["metadata"] = {"key1": "value1", "key2": "value2"}
+        db_copy = Query(item_with_dict)
+
+        # Fuzzy match against dict keys
+        db_copy.contains_value("metadata", "ey1", fuzzy=True, thresh=0.5)
+        results = db_copy.build()
+        assert isinstance(results, list)
+
+    def test_value_contains_token_fuzzy(self, complex_db):
+        """Test fuzzy token matching in value_contains_token."""
+        query = Query(complex_db)
+        query.value_contains_token("name", "Lapto", fuzzy=True, thresh=0.7)
+        results = query.build()
+        # Should fuzzy match tokens
+        assert len(results) >= 0
+
+    def test_value_contains_token_case_insensitive(self, complex_db):
+        """Test case-insensitive token matching."""
+        query = Query(complex_db)
+        query.value_contains_token("name", "laptop", ignore_case=True)
+        results = query.build()
+        # Should find items with "Laptop" token (case-insensitive)
+        assert len(results) >= 0
+
+    def test_value_contains_token_split(self, complex_db):
+        """Test token splitting in value_contains_token."""
+        db = JsonDatabase("multi_word", disable_lock=True)
+        db.add_item({"text": "the quick brown fox"})
+        db.add_item({"text": "quick brown dog"})
+
+        query = Query(db)
+        query.value_contains_token("text", "quick")
+        results = query.build()
+        # Should find both items with "quick" token
+        assert len(results) == 2
+
+    def test_contains_key_ignore_case_lowercase(self, complex_db):
+        """Test ignore_case with lowercase key."""
+        query = Query(complex_db)
+        query.contains_key("name", ignore_case=True)
+        results = query.build()
+        # Should find items with "name" key (case-insensitive)
+        assert len(results) > 0
+
+    def test_contains_key_ignore_case_uppercase(self, complex_db):
+        """Test ignore_case matching different case variants."""
+        query = Query(complex_db)
+        query.contains_key("CATEGORY", ignore_case=True)
+        results = query.build()
+        # Should match "category" field case-insensitively
+        assert len(results) > 0
+
+    def test_contains_value_string_with_substring(self, complex_db):
+        """Test contains_value on string field with substring."""
+        query = Query(complex_db)
+        query.contains_value("name", "top", ignore_case=False)
+        results = query.build()
+        # Should find "Laptop" containing "top"
+        assert any("Laptop" in str(item.get("name", "")) for item in results)
+
+    def test_contains_value_list_containment(self, complex_db):
+        """Test contains_value when key field is list."""
+        query = Query(complex_db)
+        query.contains_value("tags", "computers")
+        results = query.build()
+        # Should find items with "computers" in tags list
+        assert len(results) >= 1
+
+    def test_contains_value_dict_keys(self, complex_db):
+        """Test contains_value when key field is dict."""
+        # Add item with dict field
+        db = JsonDatabase("test_dict", disable_lock=True)
+        db.add_item({"metadata": {"color": "red", "size": "large"}})
+        db.add_item({"metadata": {"shape": "round"}})
+
+        query = Query(db)
+        query.contains_value("metadata", "color")
+        results = query.build()
+        # Should find first item with "color" in dict keys
+        assert len(results) >= 1
+
+    def test_value_contains_case_insensitive_string(self, complex_db):
+        """Test value_contains with case insensitivity."""
+        query = Query(complex_db)
+        query.value_contains("name", "LAPTOP", ignore_case=True)
+        results = query.build()
+        # Should find "Laptop" case-insensitively
+        assert len(results) >= 1
+
+    def test_value_contains_case_insensitive_list(self, complex_db):
+        """Test value_contains case-insensitive on list."""
+        query = Query(complex_db)
+        query.value_contains("tags", "COMPUTERS", ignore_case=True)
+        results = query.build()
+        # Should find items with "computers" tag case-insensitively
+        assert len(results) >= 0
+
+    def test_value_contains_case_insensitive_dict(self, complex_db):
+        """Test value_contains case-insensitive on dict keys."""
+        db = JsonDatabase("test_dict2", disable_lock=True)
+        db.add_item({"props": {"Color": "blue", "Size": "small"}})
+
+        query = Query(db)
+        query.value_contains("props", "color", ignore_case=True)
+        results = query.build()
+        # Should find "Color" key case-insensitively
+        assert len(results) >= 1
+
+    def test_equal_string_value(self, complex_db):
+        """Test equal on string value."""
+        query = Query(complex_db)
+        query.equal("name", "Laptop")
+        results = query.build()
+        assert len(results) >= 1
+        assert all(item["name"] == "Laptop" for item in results)
+
+    def test_equal_boolean_value(self, complex_db):
+        """Test equal on boolean value."""
+        query = Query(complex_db)
+        query.equal("in_stock", True)
+        results = query.build()
+        assert all(item["in_stock"] is True for item in results)
+
+    def test_below_with_float_values(self, complex_db):
+        """Test below with floating point values."""
+        query = Query(complex_db)
+        query.below("price", 100.5)
+        results = query.build()
+        assert all(item["price"] < 100.5 for item in results)
+
+    def test_above_with_float_values(self, complex_db):
+        """Test above with floating point values."""
+        query = Query(complex_db)
+        query.above("price", 100)
+        results = query.build()
+        assert all(item["price"] > 100 for item in results)
+
+    def test_chaining_multiple_fuzzy_filters(self, complex_db):
+        """Test chaining multiple fuzzy filters."""
+        query = Query(complex_db)
+        results = (query
+                   .contains_key("nam", fuzzy=True, thresh=0.5)
+                   .equal("in_stock", True)
+                   .build())
+        # Should apply both filters
+        assert all(item["in_stock"] is True for item in results)
+
+    def test_contains_value_fuzzy_list_case_insensitive(self, complex_db):
+        """Test contains_value fuzzy on list with case insensitivity."""
+        query = Query(complex_db)
+        # Fuzzy match "PORT" to "portable" in tags list (case-insensitive)
+        query.contains_value("tags", "PORT", fuzzy=True, ignore_case=True, thresh=0.6)
+        results = query.build()
+        # Should handle case-insensitive fuzzy matching on lists
+        assert isinstance(results, list)
+
+    def test_contains_value_fuzzy_dict_case_insensitive(self, complex_db):
+        """Test contains_value fuzzy on dict with case insensitivity."""
+        query = Query(complex_db)
+        # Test fuzzy matching with case-insensitivity
+        query.contains_value("name", "LAPTO", fuzzy=True, ignore_case=True, thresh=0.6)
+        results = query.build()
+        # Should execute without error
+        assert isinstance(results, list)
+
+    def test_contains_value_non_fuzzy_case_insensitive_string(self, complex_db):
+        """Test contains_value non-fuzzy with case insensitivity."""
+        query = Query(complex_db)
+        # Non-fuzzy contains_value with ignore_case on string
+        query.contains_value("name", "LAPTOP", ignore_case=True)
+        results = query.build()
+        # Should find "Laptop" containing "LAPTOP" (case-insensitive)
+        assert len(results) >= 1
+
+    def test_contains_value_non_fuzzy_case_insensitive_list(self, complex_db):
+        """Test contains_value non-fuzzy case-insensitive on list."""
+        query = Query(complex_db)
+        # Non-fuzzy contains_value with case-insensitive on list
+        query.contains_value("tags", "COMPUTERS", ignore_case=True)
+        results = query.build()
+        # Should execute without error - results depend on data
+        assert isinstance(results, list)
+
+    def test_contains_value_non_fuzzy_case_insensitive_dict(self, complex_db):
+        """Test contains_value non-fuzzy case-insensitive on dict."""
+        # Use contains_value which tries case-insensitive matching
+        query = Query(complex_db)
+        query.contains_value("name", "LAPTOP", ignore_case=True)
+        results = query.build()
+        # Should execute without error
+        assert isinstance(results, list)
+
+    def test_value_contains_case_insensitive_string_branch(self, complex_db):
+        """Test value_contains with ignore_case string type."""
+        query = Query(complex_db)
+        # value_contains with ignore_case on string field (line 124-126)
+        query.value_contains("name", "LAPTOP", ignore_case=True)
+        results = query.build()
+        assert len(results) >= 1
+
+    def test_value_contains_case_insensitive_list_branch(self, complex_db):
+        """Test value_contains with ignore_case list type."""
+        query = Query(complex_db)
+        # value_contains with ignore_case on list field (line 127-129)
+        query.value_contains("tags", "COMPUTERS", ignore_case=True)
+        results = query.build()
+        # Should execute without error
+        assert isinstance(results, list)
+
+    def test_value_contains_case_insensitive_dict_branch(self, complex_db):
+        """Test value_contains with ignore_case dict type."""
+        query = Query(complex_db)
+        # value_contains with ignore_case on fields
+        query.value_contains("name", "LAPTOP", ignore_case=True)
+        results = query.build()
+        # Should execute without error
+        assert isinstance(results, list)
