@@ -32,9 +32,9 @@ on:
 jobs:
   unit_tests:
     strategy:
-      max-parallel: 3
+      max-parallel: 4
       matrix:
-        python-version: [3.9]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -54,6 +54,13 @@ jobs:
       - name: Install core repo
         run: |
           uv pip install --system -e .
-      - name: Run unittests
+      - name: Run unittests with coverage
         run: |
-          pytest --cov=json_database --cov-report xml test
+          pytest --cov=json_database --cov-fail-under=80 --cov-report=term-missing --cov-report=xml test
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        if: matrix.python-version == '3.12'
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
