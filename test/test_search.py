@@ -59,6 +59,13 @@ class TestFuzzyMatch:
         score = fuzzy_match("café", "cafe")
         assert 0 <= score <= 1.0
 
+    def test_lru_cache_hit_on_repeated_call(self):
+        """fuzzy_match is cached: a repeated call increments cache hits."""
+        fuzzy_match.cache_clear()
+        fuzzy_match("alpha", "alpha")
+        fuzzy_match("alpha", "alpha")  # second call — must be a cache hit
+        assert fuzzy_match.cache_info().hits >= 1
+
 
 class TestMatchOne:
     """Test match_one best-match selection."""

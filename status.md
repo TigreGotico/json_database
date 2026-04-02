@@ -8,3 +8,5 @@
 - [x] 4. `fuzzy_match` lru_cache (`utils.py`)
 - [x] 5. `uncomment_json` compiled regex (`utils.py`)
 - [x] 6. `jsonify_recursively` scalar short-circuit (`utils.py`)
+- [x] 7. Add missing tests for `_active_count`, O(1) `__len__` timing, `fuzzy_match` cache hits
+- [x] 8. Clean up `spec.md` — remove stale test-coverage block, align criterion 5 with implementation

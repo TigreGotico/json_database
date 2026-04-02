@@ -11,7 +11,7 @@ Eliminate the dominant CPU bottlenecks identified by cProfile profiling: an O(n)
 2. `_active_count` MUST be recomputed from scratch after `load_local` (disk load) and `reset()`, so it stays correct across reloads.
 3. `_active_count` MUST NOT include tombstone slots.
 4. `add_item` documentation MUST note that callers performing bulk inserts of known-unique items SHOULD pass `allow_duplicates=True` to avoid the O(n) duplicate scan; no code change is required for this item.
-5. `Query.__init__` MUST NOT materialise the entire database with `list(db)`; it MUST store a direct reference to the raw item list and apply tombstone filtering lazily during filter passes.
+5. `Query.__init__` MUST NOT use `list(db)` (which invokes the full `__iter__` protocol); it MUST iterate `db.db[db.name]` directly, skipping tombstone slots, so active items are collected without the `__iter__` overhead.
 6. All `Query` filter methods MUST still yield only non-tombstone items (tombstones MUST be skipped during iteration).
 7. `Query.build()` MUST return a plain `list` (not a generator or iterator), preserving backward compatibility.
 
@@ -51,7 +51,7 @@ Eliminate the dominant CPU bottlenecks identified by cProfile profiling: an O(n)
 - [ ] `len(db)` returns the correct count after `add_item`, `remove_item`, `reset()`, and a fresh `__init__` that loads an existing file.
 - [ ] `len(db)` is served from `_active_count` without iterating the raw list (verified by asserting `db._active_count == len(db)` and that `_active_count` is an `int`).
 - [ ] Calling `len(db)` 1 000 times on a 1 000-item database completes in under 1 ms (timing assertion or equivalent).
-- [ ] `Query(db)` construction does not allocate a new list copy of the database (verified by asserting `Query(db).result is db.db[db.name]` or equivalent direct reference check).
+- [ ] `Query(db)` construction does not use `list(db)` (verified by asserting that tombstones are excluded from `query.result` and that the implementation iterates `db.db[db.name]` directly).
 - [ ] `Query(...).build()` returns a `list` instance.
 - [ ] All existing `Query` filter tests pass, confirming tombstone items are excluded from results.
 - [ ] `contains_value` does not call `contains_key` internally (verified by unit test or code inspection).
@@ -61,49 +61,3 @@ Eliminate the dominant CPU bottlenecks identified by cProfile profiling: an O(n)
 - [ ] `jsonify_recursively` returns the input value unchanged for plain scalars (int, float, str, bool, None) without entering any branch.
 - [ ] `python -m pytest` passes with no regressions.
 
-## Functional Requirements
-
-1. **Write unit tests for JsonStorage** — verify dict-like interface, file I/O, persistence across sessions, and key/value validation.
-2. **Write unit tests for JsonDatabase** — verify CRUD operations (add_item, remove_item, update_item), list representation, and item iteration.
-3. **Write unit tests for Query builder** — verify filter composition, chainability, and correctness of result filtering (exact match, fuzzy match, recursive key/value search).
-4. **Write unit tests for search utilities** — verify fuzzy matching, key/value recursion, and empty/edge cases.
-5. **Expand CI to test Python 3.10, 3.11, 3.12, 3.13** — ensure compatibility across current supported versions.
-6. **Document the Query API in README** — explain filter(), filter_fuzzy(), and_(), or_() with examples.
-7. **Document EncryptedJsonStorage in README** — explain AES-GCM encryption, key derivation, and when to use it.
-8. **Document XDG path management in README** — explain XDGJsonStorage and when it applies.
-9. **Document the HiveMind plugin in README** — explain the entry-point and integration context.
-10. **Add docstrings to all public classes and methods** — explain purpose, parameters, return types, and known limitations.
-11. **Document silent AES key truncation behavior** — clarify that keys > 16 bytes are silently sliced.
-12. **Document item_id ephemeral nature** — clearly warn that item IDs are not stable across sessions and should not be persisted externally.
-
-## Non-Goals
-
-- Refactoring or replacing item_id with stable UUIDs (architectural change — future breaking release).
-- Refactoring core search logic.
-- Migrating from setup.py to pyproject.toml (separate packaging modernization task).
-- Lazy-importing ovos_utils (separate import-safety task).
-- Removing or changing the TODO placeholders in match_item/merge_item/replace_item (design decision pending).
-
-## Interfaces & Contracts
-
-- **Test framework:** pytest (existing in dev dependencies).
-- **Coverage tool:** pytest-cov (measure and report line coverage).
-- **CI environment:** GitHub Actions (modify .github/workflows/test.yml to expand Python version matrix).
-- **Documentation format:** Markdown (README.md).
-
-## Acceptance Criteria
-
-- [ ] All core modules have ≥80% line coverage measured by pytest-cov.
-- [ ] JsonStorage tests cover persistence, dict operations, and file I/O (≥15 test cases).
-- [ ] JsonDatabase tests cover CRUD, list representation, iteration (≥20 test cases).
-- [ ] Query builder tests cover filter composition, chainability, exact/fuzzy matching (≥25 test cases).
-- [ ] Search utility tests cover fuzzy matching and recursion (≥10 test cases).
-- [ ] EncryptedJsonStorage tests unchanged; coverage remains ≥90%.
-- [ ] CI matrix includes Python 3.10, 3.11, 3.12, 3.13; all versions pass.
-- [ ] README contains a new "Query API" section with code examples.
-- [ ] README contains a new "Encryption" section explaining EncryptedJsonStorage.
-- [ ] README contains a new "XDG Paths" section explaining XDGJsonStorage.
-- [ ] README contains a new "HiveMind Integration" section.
-- [ ] All public classes and public methods have docstrings (no bare `def`s).
-- [ ] Documentation explicitly warns about item_id instability and AES key truncation.
-- [ ] Test suite runs in under 10 seconds (local dev feedback loop).

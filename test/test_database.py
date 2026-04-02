@@ -692,3 +692,32 @@ class TestJsonDatabaseErrorHandling:
         db.add_item({"role": "admin"})
         results = db.search_by_value("role", "admin")
         assert len(results) == 1
+
+    def test_active_count_is_int_and_matches_len(self, temp_db_path):
+        """_active_count is an int and always equals len(db)."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 0
+
+        db.add_item({"a": 1})
+        db.add_item({"a": 2})
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 2
+
+        db.remove_item(0)
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 1
+
+        db.commit()
+        db2 = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        assert isinstance(db2._active_count, int)
+        assert db2._active_count == len(db2) == 1
+
+    def test_len_o1_performance(self, temp_db_path):
+        """len(db) completes in O(1): 1 000 calls on 1 000-item db must finish fast."""
+        import timeit
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        for i in range(1000):
+            db.add_item({"i": i}, allow_duplicates=True)
+        elapsed = timeit.timeit(lambda: len(db), number=1000)
+        assert elapsed < 0.01, f"len(db) × 1000 took {elapsed:.4f}s, expected < 0.01s"
