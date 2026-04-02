@@ -325,7 +325,7 @@ def jsonify_recursively(thing):
         for key in jsonified.keys():
             jsonified[key] = jsonify_recursively(jsonified[key])
     elif hasattr(thing, '__dict__'):
-        jsonified = thing.__dict__
+        jsonified = {k: jsonify_recursively(v) for k, v in vars(thing).items()}
     else:
         jsonified = thing
     return jsonified
