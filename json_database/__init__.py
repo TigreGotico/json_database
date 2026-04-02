@@ -322,7 +322,7 @@ class JsonDatabase(dict):
             matches = self.match_item(value, match_strategy)
             if not matches:
                 raise MatchError
-            match, item_id = matches[0][1]
+            match, item_id = matches[0]
         else:
             match = self[item_id]
         # TODO merge strategy
@@ -339,7 +339,7 @@ class JsonDatabase(dict):
             matches = self.match_item(value, match_strategy)
             if not matches:
                 raise MatchError
-            match, item_id = matches[0][1]
+            match, item_id = matches[0]
         value = jsonify_recursively(value)
         self[item_id] = value
 
