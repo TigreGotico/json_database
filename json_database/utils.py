@@ -167,14 +167,10 @@ def is_jsonifiable(thing):
             try:
                 json.loads(thing)
                 return True
-            except:
+            except (ValueError, TypeError):
                 pass
         else:
-            try:
-                thing.__dict__
-                return True
-            except:
-                pass
+            return hasattr(thing, '__dict__')
         return False
     return True
 
@@ -204,8 +200,8 @@ def get_key_recursively(search_dict, field, filter_None=True):
                     try:
                         if get_key_recursively(item.__dict__, field, filter_None):
                             fields_found.append(item)
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_key_recursively(item, field, filter_None)
 
@@ -241,8 +237,8 @@ def get_key_recursively_fuzzy(search_dict, field, thresh=0.6, filter_None=True):
                     try:
                         if get_key_recursively_fuzzy(item.__dict__, field, thresh, filter_None):
                             fields_found.append((item, score))
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_key_recursively_fuzzy(item, field, thresh, filter_None)
     return sorted(fields_found, key = lambda i: i[1],reverse=True)
@@ -272,8 +268,8 @@ def get_value_recursively(search_dict, field, target_value):
                     try:
                         if get_value_recursively(item.__dict__, field, target_value):
                             fields_found.append(item)
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_value_recursively(item, field, target_value)
 
@@ -310,8 +306,8 @@ def get_value_recursively_fuzzy(search_dict, field, target_value, thresh=0.6):
                         found = get_value_recursively_fuzzy(item.__dict__, field, target_value, thresh)
                         if len(found):
                             fields_found.append((item, found[0][1]))
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_value_recursively_fuzzy(item, field, target_value, thresh)
 
