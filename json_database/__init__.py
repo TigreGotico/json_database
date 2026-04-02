@@ -370,14 +370,26 @@ class JsonDatabase(dict):
 
     # search
     def search_by_key(self, key, fuzzy=False, thresh=0.7, include_empty=False):
-        if fuzzy:
-            return get_key_recursively_fuzzy(self.db, key, thresh, not include_empty)
-        return get_key_recursively(self.db, key, not include_empty)
+        results = []
+        for item in self:  # skips None tombstones
+            if not isinstance(item, dict):
+                continue
+            if fuzzy:
+                results += get_key_recursively_fuzzy(item, key, thresh, not include_empty)
+            else:
+                results += get_key_recursively(item, key, not include_empty)
+        return results
 
     def search_by_value(self, key, value, fuzzy=False, thresh=0.7):
-        if fuzzy:
-            return get_value_recursively_fuzzy(self.db, key, value, thresh)
-        return get_value_recursively(self.db, key, value)
+        results = []
+        for item in self:  # skips None tombstones
+            if not isinstance(item, dict):
+                continue
+            if fuzzy:
+                results += get_value_recursively_fuzzy(item, key, value, thresh)
+            else:
+                results += get_value_recursively(item, key, value)
+        return results
 
 
 # XDG aware classes
