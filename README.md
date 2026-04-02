@@ -196,3 +196,125 @@ print(db.search_by_value("age", 12))
 print(db.search_by_value("name", "jon", fuzzy=True))
 
 ```
+
+## Query API
+
+For more advanced filtering and searching, use the fluent Query builder API:
+
+```python
+from json_database import JsonDatabase
+from json_database.search import Query
+
+db = JsonDatabase("products", "products.db")
+
+# Add some products
+db.add_item({"id": 1, "name": "Laptop", "category": "Electronics", "price": 999.99, "in_stock": True})
+db.add_item({"id": 2, "name": "Mouse", "category": "Electronics", "price": 29.99, "in_stock": True})
+db.add_item({"id": 3, "name": "Book", "category": "Books", "price": 19.99, "in_stock": False})
+
+# Chain multiple filters
+query = Query(db)
+results = (query
+    .equal("category", "Electronics")
+    .equal("in_stock", True)
+    .below("price", 100)
+    .build())
+
+print(results)  # [Laptop, Mouse]
+
+# Available filter methods:
+# - contains_key(key, fuzzy=False, thresh=0.7, ignore_case=False)
+# - contains_value(key, value, fuzzy=False, thresh=0.75, ignore_case=False)
+# - value_contains(key, value, ignore_case=False)
+# - value_contains_token(key, value, fuzzy=False, thresh=0.75, ignore_case=False)
+# - equal(key, value, ignore_case=False)
+# - below(key, value) / above(key, value)
+# - below_or_equal(key, value) / above_or_equal(key, value)
+# - in_range(key, min_value, max_value)
+# - all() - no-op, returns all items
+```
+
+## Encryption
+
+Store sensitive data encrypted on disk using AES-256-GCM:
+
+```python
+from json_database import EncryptedJsonStorage
+
+# Create encrypted storage with 16-byte key
+key = "1234567890123456"  # Must be exactly 16 bytes
+encrypted_storage = EncryptedJsonStorage(key, "secrets.json")
+
+# Data is readable in memory
+encrypted_storage["api_key"] = "sk-1234567890abcdef"
+encrypted_storage["password"] = "super_secret_password"
+
+# But stored encrypted on disk
+encrypted_storage.store()
+
+# Decrypt on load
+encrypted_storage2 = EncryptedJsonStorage(key, "secrets.json")
+print(encrypted_storage2["api_key"])  # "sk-1234567890abcdef"
+
+# Encrypted databases work the same way
+from json_database import EncryptedJsonStorageXDG
+
+# Uses XDG data directory for secure storage
+encrypted_db = EncryptedJsonStorageXDG(key, "user_secrets")
+encrypted_db["oauth_token"] = "token_value"
+encrypted_db.store()
+```
+
+**Important:** Keys are truncated to 16 bytes if longer. Always use exactly 16 bytes.
+
+## XDG Paths
+
+Follow Linux XDG Base Directory specification for storing files in standard locations:
+
+```python
+from json_database import JsonStorageXDG, JsonDatabaseXDG, JsonConfigXDG
+
+# Cache (temporary data, can be deleted)
+cache = JsonStorageXDG("app_cache")  # ~/.cache/json_database/app_cache.json
+
+# Data (persistent application data)
+db = JsonDatabaseXDG("users")  # ~/.local/share/json_database/users.jsondb
+db.add_item({"id": 1, "username": "alice"})
+db.commit()
+
+# Config (user preferences and settings)
+config = JsonConfigXDG("myapp")  # ~/.config/json_database/myapp.json
+config["theme"] = "dark"
+config["language"] = "en"
+config.store()
+
+# Custom locations
+from json_database import JsonStorageXDG
+
+custom_cache = JsonStorageXDG("app", xdg_folder="/custom/path")
+```
+
+This ensures your application respects user preferences for where application data should be stored.
+
+## HiveMind Integration
+
+This library provides seamless integration with the HiveMind voice assistant ecosystem:
+
+```python
+# Use as a HiveMind plugin for distributed knowledge storage
+from json_database.hpm import JsonDatabasePlugin
+
+plugin = JsonDatabasePlugin()
+
+# Store and retrieve data across the HiveMind network
+plugin.store_item({"knowledge": "data"})
+results = plugin.search_by_value("field", "value")
+```
+
+**Database Plugin Features:**
+- `hivemind-json-db-plugin` entry point for plugin manager
+- Client credentials and permissions storage
+- Distributed query support across HiveMind nodes
+- Encryption support for sensitive data
+
+See [HiveMind documentation](https://github.com/JarbasHiveMind) for full integration details.
