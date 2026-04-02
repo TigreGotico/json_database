@@ -9,7 +9,7 @@
 ### Expanded Tests
 - [ ] Expand `test/test_storage.py` — error handling (reload failure, store errors, logging)
 - [ ] Expand `test/test_database.py` — match/merge/replace strategies and edge cases
-- [ ] Expand `test/test_search.py` — merge_dict recursion, uncomment_json comments, fuzzy thresholds
+- [x] Expand `test/test_search.py` — merge_dict recursion, uncomment_json comments, fuzzy thresholds
 
 ### Query Fuzzy Matching Coverage
 - [ ] Add Query fuzzy matching edge cases (threshold boundaries, type coercion)

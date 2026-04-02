@@ -313,6 +313,103 @@ class TestMergeDict:
         assert result["level1"]["level2"]["level3"]["new_value"] == "added"
 
 
+class TestMergeDictEdgeCases:
+    """Test edge cases in merge_dict for full coverage."""
+
+    def test_merge_dict_nested_with_false_values(self):
+        """Test merge_dict preserves False values (not treated as empty)."""
+        base = {"flag": True}
+        delta = {"flag": False}
+        result = merge_dict(base, delta, skip_empty=True)
+        assert result["flag"] is False
+
+    def test_merge_dict_list_with_empty_list_skip(self):
+        """Test skip_empty=True doesn't skip empty list."""
+        base = {"items": [1, 2, 3]}
+        delta = {"items": []}
+        result = merge_dict(base, delta, skip_empty=True)
+        # Empty list should be skipped, so base value remains
+        assert result["items"] == [1, 2, 3]
+
+    def test_merge_dict_replace_dict_with_list(self):
+        """Test merge_dict replaces dict with list."""
+        base = {"data": {"key": "value"}}
+        delta = {"data": [1, 2, 3]}
+        result = merge_dict(base, delta, merge_lists=False)
+        assert result["data"] == [1, 2, 3]
+
+    def test_merge_dict_replace_list_with_dict(self):
+        """Test merge_dict replaces list with dict."""
+        base = {"data": [1, 2, 3]}
+        delta = {"data": {"key": "value"}}
+        result = merge_dict(base, delta, merge_lists=False)
+        assert result["data"] == {"key": "value"}
+
+    def test_merge_dict_with_zero_value_skipped(self):
+        """Test merge_dict skips 0 values with skip_empty=True."""
+        base = {"count": 5}
+        delta = {"count": 0}
+        result = merge_dict(base, delta, skip_empty=True)
+        # 0 is considered empty, so should be skipped
+        assert result["count"] == 5
+
+    def test_merge_dict_with_zero_value_not_skipped(self):
+        """Test merge_dict preserves 0 without skip_empty."""
+        base = {"count": 5}
+        delta = {"count": 0}
+        result = merge_dict(base, delta, skip_empty=False)
+        assert result["count"] == 0
+
+    def test_merge_dict_none_with_skip_empty(self):
+        """Test merge_dict with None values and skip_empty."""
+        base = {"key": "original"}
+        delta = {"key": None}
+        result = merge_dict(base, delta, skip_empty=True)
+        # None is empty, should be skipped
+        assert result["key"] == "original"
+
+    def test_merge_dict_none_without_skip_empty(self):
+        """Test merge_dict with None values without skip_empty."""
+        base = {"key": "original"}
+        delta = {"key": None}
+        result = merge_dict(base, delta, skip_empty=False)
+        assert result["key"] is None
+
+    def test_merge_dict_deeply_nested_with_merge_lists_false(self):
+        """Test nested merge with merge_lists=False."""
+        base = {
+            "level1": {
+                "level2": {
+                    "items": [1, 2, 3]
+                }
+            }
+        }
+        delta = {
+            "level1": {
+                "level2": {
+                    "items": [4, 5]
+                }
+            }
+        }
+        result = merge_dict(base, delta, merge_lists=False)
+        # Should replace the list, not merge it
+        assert result["level1"]["level2"]["items"] == [4, 5]
+
+    def test_merge_dict_empty_string_with_skip(self):
+        """Test merge_dict skips empty string when skip_empty=True."""
+        base = {"name": "original"}
+        delta = {"name": ""}
+        result = merge_dict(base, delta, skip_empty=True)
+        assert result["name"] == "original"
+
+    def test_merge_dict_unicode_values(self):
+        """Test merge_dict with unicode values."""
+        base = {"greeting": "hello"}
+        delta = {"greeting": "こんにちは"}
+        result = merge_dict(base, delta)
+        assert result["greeting"] == "こんにちは"
+
+
 class TestSearchEdgeCases:
     """Test edge cases in search operations."""
 
