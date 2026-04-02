@@ -91,11 +91,14 @@ class Query:
         return self
 
     def contains_value(self, key, value, fuzzy=False, thresh=0.75, ignore_case=False):
-        self.contains_key(key, ignore_case=ignore_case)
+        # Single-pass: key-presence and value-match are checked together.
+        after = []
         if fuzzy:
-            after = []
             for e in self.result:
-                v = _get_value(e, key, ignore_case)
+                try:
+                    v = _get_value(e, key, ignore_case)
+                except KeyError:
+                    continue
                 if isinstance(v, str):
                     score = fuzzy_match(value.lower(), v.lower()) if ignore_case else fuzzy_match(value, v)
                     if score > thresh:
@@ -110,18 +113,24 @@ class Query:
                                 if ignore_case else match_one(value, v))
                     if score >= thresh:
                         after.append(e)
-            self.result = after
         elif ignore_case and isinstance(value, str):
-            after = []
             for a in self.result:
-                v = _get_value(a, key, ignore_case)
+                try:
+                    v = _get_value(a, key, ignore_case)
+                except KeyError:
+                    continue
                 if isinstance(v, str) and value.lower() in v.lower():
                     after.append(a)
                 elif value.lower() in v or value in v:
                     after.append(a)
-            self.result = after
         else:
-            self.result = [a for a in self.result if value in _get_value(a, key)]
+            for a in self.result:
+                try:
+                    if value in _get_value(a, key):
+                        after.append(a)
+                except KeyError:
+                    pass
+        self.result = after
         return self
 
     def value_contains(self, key, value, ignore_case=False):
