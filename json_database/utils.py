@@ -1,6 +1,9 @@
 import json
+import re
 from difflib import SequenceMatcher
 from functools import lru_cache
+
+_COMMENT_RE = re.compile(r'^\s*(//|#)')
 
 
 class DummyLock:
@@ -152,15 +155,7 @@ def uncomment_json(commented_json_str):
         str: uncommented, legal JSON
     """
     lines = commented_json_str.splitlines()
-    # remove all comment lines, starting with // or #
-    nocomment = []
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("//") or stripped.startswith("#"):
-            continue
-        nocomment.append(line)
-
-    return "\n".join(nocomment)
+    return "\n".join(line for line in lines if not _COMMENT_RE.match(line))
 
 
 def is_jsonifiable(thing):
