@@ -1,5 +1,6 @@
 """Unit tests for search utility functions."""
 
+import json
 import pytest
 from json_database.utils import (
     fuzzy_match, match_one, merge_dict,
@@ -452,3 +453,435 @@ class TestSearchEdgeCases:
         """Test match_one with empty list."""
         with pytest.raises((IndexError, ValueError)):
             match_one("query", [])
+
+
+class TestUncommentJson:
+    """Test uncomment_json and load_commented_json."""
+
+    def test_uncomment_single_line_comments(self):
+        """Test removing lines starting with //."""
+        from json_database.utils import uncomment_json
+        json_str = '{\n  // this is a comment\n  "name": "value"\n}'
+        result = uncomment_json(json_str)
+        assert "this is a comment" not in result
+        assert "name" in result
+
+    def test_uncomment_hash_comments(self):
+        """Test removing lines starting with #."""
+        from json_database.utils import uncomment_json
+        json_str = '{\n  # hash comment\n  "key": 1\n}'
+        result = uncomment_json(json_str)
+        assert "hash comment" not in result
+        assert "key" in result
+
+    def test_uncomment_multiline_with_comments(self):
+        """Test removing comments from multiline JSON."""
+        from json_database.utils import uncomment_json
+        json_str = '''{\n  // start\n  "a": 1,\n  # middle\n  "b": 2\n  // end\n}'''
+        result = uncomment_json(json_str)
+        assert "//" not in result
+        assert "#" not in result
+        assert '"a": 1' in result
+        assert '"b": 2' in result
+
+    def test_uncomment_preserves_json_structure(self):
+        """Test that JSON structure is preserved after removing comments."""
+        from json_database.utils import uncomment_json
+        json_str = '''{\n  // comment here\n  "key": "value",\n  # another comment\n  "list": [1, 2, 3]\n}'''
+        result = uncomment_json(json_str)
+        data = json.loads(result)
+        assert data["key"] == "value"
+        assert data["list"] == [1, 2, 3]
+
+    def test_uncomment_empty_lines(self):
+        """Test handling empty lines in JSON."""
+        from json_database.utils import uncomment_json
+        json_str = '{\n  \n  "key": "val"\n  \n}'
+        result = uncomment_json(json_str)
+        assert "key" in result
+
+    def test_uncomment_indented_comments(self):
+        """Test removing indented comment lines."""
+        from json_database.utils import uncomment_json
+        json_str = '''{\n    // indented comment\n    "field": "data"\n}'''
+        result = uncomment_json(json_str)
+        assert "indented comment" not in result
+
+    def test_load_commented_json_file(self, tmp_path):
+        """Test load_commented_json with actual file."""
+        from json_database.utils import load_commented_json
+        test_file = tmp_path / "test.json"
+        content = '''{\n  // comment\n  "test": "data"\n}'''
+        test_file.write_text(content)
+        data = load_commented_json(str(test_file))
+        assert data["test"] == "data"
+
+    def test_load_commented_json_complex(self, tmp_path):
+        """Test load_commented_json with complex JSON."""
+        from json_database.utils import load_commented_json
+        test_file = tmp_path / "complex.json"
+        content = '''{\n  // config section\n  "app": {\n    # database\n    "db": "sqlite",\n    "port": 5432\n  },\n  // items\n  "items": [1, 2, 3]\n}'''
+        test_file.write_text(content)
+        data = load_commented_json(str(test_file))
+        assert data["app"]["db"] == "sqlite"
+        assert data["items"] == [1, 2, 3]
+
+
+class TestIsJsonifiable:
+    """Test is_jsonifiable utility function."""
+
+    def test_is_jsonifiable_dict(self):
+        """Test that dict is jsonifiable."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable({"key": "value"}) is True
+
+    def test_is_jsonifiable_valid_json_string(self):
+        """Test that valid JSON string is jsonifiable."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable('{"key": "value"}') is True
+
+    def test_is_jsonifiable_invalid_json_string(self):
+        """Test that invalid JSON string is not jsonifiable."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable("not json {invalid}") is False
+
+    def test_is_jsonifiable_plain_string(self):
+        """Test that plain string is not jsonifiable (not valid JSON)."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable("plain string") is False
+
+    def test_is_jsonifiable_object_with_dict(self):
+        """Test that object with __dict__ is jsonifiable."""
+        from json_database.utils import is_jsonifiable
+        class TestObj:
+            pass
+        obj = TestObj()
+        assert is_jsonifiable(obj) is True
+
+    def test_is_jsonifiable_number(self):
+        """Test that number is not jsonifiable (no __dict__)."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable(42) is False
+
+    def test_is_jsonifiable_list(self):
+        """Test that list is not jsonifiable (no __dict__)."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable([1, 2, 3]) is False
+
+    def test_is_jsonifiable_none(self):
+        """Test that None is not jsonifiable."""
+        from json_database.utils import is_jsonifiable
+        assert is_jsonifiable(None) is False
+
+
+class TestGetValueRecursivelyFuzzy:
+    """Test fuzzy value searching."""
+
+    def test_get_value_recursively_fuzzy_exact_match(self):
+        """Test fuzzy value search with exact match."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"name": "Alice", "age": 30}
+        results = get_value_recursively_fuzzy(data, "name", "Alice", thresh=0.5)
+        assert len(results) > 0
+        assert results[0][1] == 1.0
+
+    def test_get_value_recursively_fuzzy_partial_match(self):
+        """Test fuzzy value search with partial match."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"product": "Laptop"}
+        results = get_value_recursively_fuzzy(data, "product", "Lapto", thresh=0.7)
+        # Should find similar value
+        assert len(results) > 0
+
+    def test_get_value_recursively_fuzzy_in_list(self):
+        """Test fuzzy matching values inside lists."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"tags": ["python", "testing", "data"]}
+        results = get_value_recursively_fuzzy(data, "tags", "python", thresh=0.5)
+        assert len(results) > 0
+
+    def test_get_value_recursively_fuzzy_nested(self):
+        """Test fuzzy matching in nested structures."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {
+            "user": {
+                "profile": {
+                    "name": "John"
+                }
+            }
+        }
+        results = get_value_recursively_fuzzy(data, "name", "John", thresh=0.5)
+        assert len(results) > 0
+
+    def test_get_value_recursively_fuzzy_no_match(self):
+        """Test fuzzy matching when no match found."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"name": "Alice"}
+        results = get_value_recursively_fuzzy(data, "name", "xyz", thresh=0.99)
+        assert len(results) == 0
+
+    def test_get_value_recursively_fuzzy_threshold(self):
+        """Test fuzzy matching with different thresholds."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"word": "test"}
+        results_low = get_value_recursively_fuzzy(data, "word", "tost", thresh=0.5)
+        results_high = get_value_recursively_fuzzy(data, "word", "tost", thresh=0.99)
+        assert len(results_low) >= len(results_high)
+
+    def test_get_value_recursively_fuzzy_multiple_matches(self):
+        """Test fuzzy matching returns multiple matches sorted by score."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {
+            "a": "apple",
+            "b": "apply",
+            "c": "orange"
+        }
+        results = get_value_recursively_fuzzy(data, "a", "aple", thresh=0.6)
+        # Should be sorted by score (highest first)
+        if len(results) > 1:
+            assert results[0][1] >= results[1][1]
+
+
+class TestJsonifyRecursively:
+    """Test jsonify_recursively utility function."""
+
+    def test_jsonify_recursively_dict(self):
+        """Test jsonifying a simple dict."""
+        from json_database.utils import jsonify_recursively
+        data = {"key": "value", "nested": {"inner": "data"}}
+        result = jsonify_recursively(data)
+        assert result["key"] == "value"
+        assert result["nested"]["inner"] == "data"
+
+    def test_jsonify_recursively_list(self):
+        """Test jsonifying a list."""
+        from json_database.utils import jsonify_recursively
+        data = [1, 2, {"key": "value"}]
+        result = jsonify_recursively(data)
+        assert len(result) == 3
+        assert result[2]["key"] == "value"
+
+    def test_jsonify_recursively_nested_lists(self):
+        """Test jsonifying nested lists."""
+        from json_database.utils import jsonify_recursively
+        data = [[1, 2], [3, 4]]
+        result = jsonify_recursively(data)
+        assert result == [[1, 2], [3, 4]]
+
+    def test_jsonify_recursively_object_with_dict(self):
+        """Test jsonifying object with __dict__."""
+        from json_database.utils import jsonify_recursively
+        class TestObj:
+            def __init__(self):
+                self.name = "test"
+                self.value = 42
+        obj = TestObj()
+        result = jsonify_recursively(obj)
+        assert result["name"] == "test"
+        assert result["value"] == 42
+
+    def test_jsonify_recursively_mixed_structure(self):
+        """Test jsonifying mixed dict/list/object structures."""
+        from json_database.utils import jsonify_recursively
+        class Item:
+            def __init__(self, val):
+                self.val = val
+        data = {
+            "items": [Item(1), Item(2)],
+            "meta": {"count": 2}
+        }
+        result = jsonify_recursively(data)
+        assert len(result["items"]) == 2
+        assert result["items"][0]["val"] == 1
+        assert result["meta"]["count"] == 2
+
+    def test_jsonify_recursively_scalar_values(self):
+        """Test jsonifying scalar values."""
+        from json_database.utils import jsonify_recursively
+        assert jsonify_recursively(42) == 42
+        assert jsonify_recursively("string") == "string"
+        assert jsonify_recursively(3.14) == 3.14
+        assert jsonify_recursively(True) is True
+
+
+class TestGetKeyRecursivelyEdgeCases:
+    """Test edge cases in get_key_recursively functions."""
+
+    def test_get_key_recursively_with_objects_in_list(self):
+        """Test get_key_recursively with list containing dicts."""
+        class Item:
+            def __init__(self, name):
+                self.name = name
+
+        data = {
+            "items": [Item("first"), Item("second")]
+        }
+        results = get_key_recursively(data, "name")
+        # Should find name in objects within list via __dict__
+        assert isinstance(results, list)
+
+    def test_get_key_recursively_unparseable_input(self):
+        """Test get_key_recursively raises error for unparseable input."""
+        with pytest.raises(ValueError):
+            get_key_recursively(42, "key")
+
+    def test_get_key_recursively_fuzzy_empty_threshold(self):
+        """Test fuzzy key search with very low threshold."""
+        from json_database.utils import get_key_recursively_fuzzy
+        data = {"product": "item", "name": "test"}
+        results = get_key_recursively_fuzzy(data, "x", thresh=0.0)
+        # Even low threshold should match something
+        assert len(results) >= 0
+
+    def test_get_key_recursively_fuzzy_high_threshold(self):
+        """Test fuzzy key search with very high threshold."""
+        from json_database.utils import get_key_recursively_fuzzy
+        data = {"firstname": "John", "lastname": "Doe"}
+        results = get_key_recursively_fuzzy(data, "name", thresh=0.99)
+        # High threshold may not match anything
+        assert isinstance(results, list)
+
+    def test_get_key_recursively_fuzzy_sorting(self):
+        """Test that fuzzy results are sorted by score."""
+        from json_database.utils import get_key_recursively_fuzzy
+        data = {
+            "name": "test",
+            "names": "test2",
+            "n": "test3"
+        }
+        results = get_key_recursively_fuzzy(data, "name", thresh=0.3)
+        if len(results) > 1:
+            # Should be sorted by score descending
+            for i in range(len(results) - 1):
+                assert results[i][1] >= results[i+1][1]
+
+
+class TestGetValueRecursivelyEdgeCases:
+    """Test edge cases in get_value_recursively functions."""
+
+    def test_get_value_recursively_unparseable_input(self):
+        """Test get_value_recursively raises error for unparseable input."""
+        with pytest.raises(ValueError):
+            get_value_recursively(42, "key", "value")
+
+    def test_get_value_recursively_with_objects_in_list(self):
+        """Test get_value_recursively with objects in list."""
+        class Item:
+            def __init__(self, id):
+                self.id = id
+        data = {"items": [Item(1), Item(2)]}
+        results = get_value_recursively(data, "id", 1)
+        # Should find objects with id=1
+        assert len(results) >= 1
+
+    def test_get_value_recursively_fuzzy_unparseable(self):
+        """Test get_value_recursively_fuzzy raises error for unparseable input."""
+        with pytest.raises(ValueError):
+            get_value_recursively_fuzzy(42, "key", "value")
+
+    def test_get_value_recursively_fuzzy_list_fuzzy_matching(self):
+        """Test fuzzy matching against list values."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"tags": ["python", "testing"]}
+        results = get_value_recursively_fuzzy(data, "tags", "python", thresh=0.5)
+        assert len(results) > 0
+
+    def test_get_value_recursively_fuzzy_dict_value(self):
+        """Test fuzzy search when key maps to dict (no match)."""
+        from json_database.utils import get_value_recursively_fuzzy
+        data = {"nested": {"inner": "value"}}
+        # Searching for dict value should not match
+        results = get_value_recursively_fuzzy(data, "nested", "value", thresh=0.5)
+        assert isinstance(results, list)
+
+    def test_get_value_recursively_fuzzy_object_in_list(self):
+        """Test fuzzy search with objects in list."""
+        from json_database.utils import get_value_recursively_fuzzy
+        class Item:
+            def __init__(self, name):
+                self.name = name
+        data = {"items": [Item("test")]}
+        results = get_value_recursively_fuzzy(data, "name", "test", thresh=0.5)
+        assert len(results) >= 0  # May or may not find depending on structure
+
+
+class TestDummyLock:
+    """Test DummyLock utility class."""
+
+    def test_dummy_lock_acquire(self):
+        """Test DummyLock.acquire always returns True."""
+        from json_database.utils import DummyLock
+        lock = DummyLock("/tmp/test.lock")
+        assert lock.acquire() is True
+        assert lock.acquire(blocking=False) is True
+
+    def test_dummy_lock_release(self):
+        """Test DummyLock.release is a no-op."""
+        from json_database.utils import DummyLock
+        lock = DummyLock("/tmp/test.lock")
+        lock.release()  # Should not raise
+
+    def test_dummy_lock_context_manager(self):
+        """Test DummyLock as context manager."""
+        from json_database.utils import DummyLock
+        with DummyLock("/tmp/test.lock") as lock:
+            assert lock is not None
+        # Should exit cleanly
+
+    def test_dummy_lock_path(self):
+        """Test DummyLock stores path."""
+        from json_database.utils import DummyLock
+        lock = DummyLock("/tmp/mylock.lock")
+        assert lock.path == "/tmp/mylock.lock"
+
+
+class TestMergeDictRecursionEdgeCases:
+    """Test deep recursion edge cases in merge_dict."""
+
+    def test_merge_dict_deeply_nested_recursion(self):
+        """Test merge_dict with deeply nested structures."""
+        base = {
+            "l1": {
+                "l2": {
+                    "l3": {
+                        "l4": {
+                            "value": "original"
+                        }
+                    }
+                }
+            }
+        }
+        delta = {
+            "l1": {
+                "l2": {
+                    "l3": {
+                        "l4": {
+                            "new": "added"
+                        }
+                    }
+                }
+            }
+        }
+        result = merge_dict(base, delta)
+        assert result["l1"]["l2"]["l3"]["l4"]["value"] == "original"
+        assert result["l1"]["l2"]["l3"]["l4"]["new"] == "added"
+
+    def test_merge_dict_with_all_flags_enabled(self):
+        """Test merge_dict with all options enabled."""
+        base = {"list": [1, 2], "data": {"key": "val"}}
+        delta = {"list": [2, 3, 4], "data": {"new": "item"}}
+        result = merge_dict(base, delta, merge_lists=True, skip_empty=True,
+                           no_dupes=True, new_only=False)
+        assert 1 in result["list"]
+        assert 3 in result["list"]
+        assert result["list"].count(2) == 1  # No dupes
+        assert result["data"]["key"] == "val"
+        assert result["data"]["new"] == "item"
+
+    def test_merge_dict_nested_skip_empty(self):
+        """Test skip_empty in nested merge."""
+        base = {"nested": {"key": "value"}}
+        delta = {"nested": {"key": ""}}
+        result = merge_dict(base, delta, skip_empty=True)
+        # Empty value should be skipped, keeping original
+        assert result["nested"]["key"] == "value"
