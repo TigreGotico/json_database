@@ -260,7 +260,8 @@ class JsonDatabase(dict):
 
     def __iter__(self):
         for item in self.db[self.name]:
-            yield item
+            if item is not None:
+                yield item
 
     def __contains__(self, item):
         item = jsonify_recursively(item)
@@ -301,7 +302,9 @@ class JsonDatabase(dict):
         """
         value = jsonify_recursively(value)
         matches = []
-        for idx, item in enumerate(self):
+        for idx, item in enumerate(self.db[self.name]):
+            if item is None:
+                continue
 
             # TODO match strategy
             # - require exact match
@@ -346,8 +349,8 @@ class JsonDatabase(dict):
     # item_id
     def get_item_id(self, item):
         """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
+        Return the list index of item. Item IDs are stable — remove_item
+        replaces the slot with None rather than shifting subsequent entries.
         """
         for match, idx in self.match_item(item):
             return idx
@@ -355,18 +358,21 @@ class JsonDatabase(dict):
 
     def update_item(self, item_id, new_item):
         """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
+        Replace the item at item_id with new_item.
+        item_id is a stable list index (see remove_item).
         """
         new_item = jsonify_recursively(new_item)
         self.db[self.name][item_id] = new_item
 
     def remove_item(self, item_id):
         """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
+        Mark item_id as revoked by replacing it with None.
+        The slot is retained so all other item IDs remain stable.
+        Revoked entries are invisible to iteration, search, and __contains__.
         """
-        return self.db[self.name].pop(item_id)
+        if item_id < 0 or item_id >= len(self.db[self.name]):
+            raise InvalidItemID
+        self.db[self.name][item_id] = None
 
     # search
     def search_by_key(self, key, fuzzy=False, thresh=0.7, include_empty=False):
