@@ -236,7 +236,7 @@ class JsonDatabase(dict):
         return str(jsonify_recursively(self))
 
     def __len__(self):
-        return len(self.db.get(self.name, []))
+        return sum(1 for item in self.db.get(self.name, []) if item is not None)
 
     def __getitem__(self, item):
         if not isinstance(item, int):
@@ -248,12 +248,13 @@ class JsonDatabase(dict):
                     raise InvalidItemID
         else:
             item_id = item
-        if item_id >= len(self.db[self.name]):
+        raw = self.db[self.name]
+        if item_id >= len(raw) or raw[item_id] is None:
             raise InvalidItemID
-        return self.db[self.name][item_id]
+        return raw[item_id]
 
     def __setitem__(self, item_id, value):
-        if not isinstance(item_id, int) or item_id >= len(self) or item_id < 0:
+        if not isinstance(item_id, int) or item_id >= len(self.db[self.name]) or item_id < 0:
             raise InvalidItemID
         else:
             self.update_item(item_id, value)

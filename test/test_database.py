@@ -95,37 +95,38 @@ class TestJsonDatabase:
             db[999] = {"id": 1, "new_data": "value"}
 
     def test_remove_item(self, temp_db_path):
-        """Test removing an item."""
+        """Test removing an item leaves a tombstone and active count drops."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": 1, "name": "First"})
         db.add_item({"id": 2, "name": "Second"})
         db.add_item({"id": 3, "name": "Third"})
 
         assert len(db) == 3
-        db.remove_item(1)  # Remove "Second"
+        db.remove_item(1)  # Revoke "Second" — slot becomes None tombstone
 
-        assert len(db) == 2
-        assert db[0]["id"] == 1
-        assert db[1]["id"] == 3
+        assert len(db) == 2          # active items only
+        assert db[0]["id"] == 1      # First unchanged
+        assert db[2]["id"] == 3      # Third still at index 2 (stable)
+        with pytest.raises(InvalidItemID):
+            _ = db[1]                # tombstone slot raises InvalidItemID
 
-    def test_remove_item_shifts_indices(self, temp_db_path):
-        """Test that removing item shifts remaining indices (ephemeral ID warning)."""
+    def test_remove_item_stable_indices(self, temp_db_path):
+        """Test that removing an item does NOT shift remaining item IDs."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": 10, "name": "A"})
         db.add_item({"id": 20, "name": "B"})
         db.add_item({"id": 30, "name": "C"})
 
-        # Get ID of item with name "C"
         c_id = db.get_item_id({"id": 30, "name": "C"})
         assert c_id == 2
 
         # Remove item "B"
         db.remove_item(1)
 
-        # Now item "C" has shifted down to index 1
+        # C is still at index 2 — IDs are stable
         c_new_id = db.get_item_id({"id": 30, "name": "C"})
-        assert c_new_id == 1
-        assert c_id != c_new_id  # IDs are NOT stable
+        assert c_new_id == 2
+        assert c_new_id == c_id  # IDs ARE stable after tombstone removal
 
     def test_get_item_id(self, temp_db_path, sample_list_data):
         """Test getting item ID (index) for an item."""
@@ -358,14 +359,13 @@ class TestJsonDatabase:
         assert "users" in db2.db  # But users data is loaded from file
         assert db2.db["users"] == [{"id": 1, "name": "Alice"}]
 
-    def test_item_id_ephemerality_warning(self, temp_db_path):
-        """Test documentation of item_id ephemeral nature."""
+    def test_item_id_stable_after_removal(self, temp_db_path):
+        """Test that item IDs are stable after removal (tombstone behaviour)."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": "A"})
         db.add_item({"id": "B"})
         db.add_item({"id": "C"})
 
-        # Store IDs
         id_a = db.get_item_id({"id": "A"})
         id_b = db.get_item_id({"id": "B"})
         id_c = db.get_item_id({"id": "C"})
@@ -374,13 +374,20 @@ class TestJsonDatabase:
         assert id_b == 1
         assert id_c == 2
 
-        # Remove middle item
+        # Remove middle item — slot becomes None, not popped
         db.remove_item(1)
 
-        # IDs shift - B no longer exists, C moved
+        # C is still at index 2 — IDs are stable
         new_id_c = db.get_item_id({"id": "C"})
-        assert new_id_c == 1  # Shifted from 2
-        assert new_id_c != id_c  # NOT stable!
+        assert new_id_c == 2        # unchanged
+        assert new_id_c == id_c     # stable across removal
+
+        # Revoked slot raises InvalidItemID
+        with pytest.raises(InvalidItemID):
+            _ = db[1]
+
+        # Active count reflects live items only
+        assert len(db) == 2
 
 
 class TestJsonDatabaseErrorHandling:

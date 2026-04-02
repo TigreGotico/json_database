@@ -10,6 +10,13 @@
 - [x] Fix `uncomment_json` — use `\n` join instead of space (`utils.py`)
 - [x] Narrow bare `except` in search helpers to `except AttributeError` (`utils.py`)
 
+## Post-audit fixes
+
+- [x] `__len__` counts active (non-None) items only
+- [x] `__getitem__` raises InvalidItemID for tombstone slots
+- [x] `__setitem__` bounds check uses raw list length
+- [x] Updated 3 tests that asserted old shift-on-remove behaviour
+
 ## Blockers
 
 None.
