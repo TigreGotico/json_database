@@ -19,6 +19,18 @@ from json_database.xdg_utils import xdg_cache_home, xdg_data_home, xdg_config_ho
 LOG = logging.getLogger("JsonDatabase")
 LOG.setLevel("INFO")
 
+# Tombstone sentinel stored in the JSON list when remove_item() is called.
+# Using a dict avoids collision with JSON null (None), which is a valid value.
+# The key is long and prefixed to minimise accidental collision with real data.
+_TOMBSTONE = {"__json_database_tombstone__": True}
+
+
+def _is_tombstone(item):
+    """Return True if item is a tombstone (revoked slot)."""
+    return (item is None or
+            (isinstance(item, dict)
+             and item.get("__json_database_tombstone__") is True))
+
 
 class JsonStorage(dict):
     """Persistent Python dictionary stored as JSON on disk.
@@ -236,7 +248,7 @@ class JsonDatabase(dict):
         return str(jsonify_recursively(self))
 
     def __len__(self):
-        return sum(1 for item in self.db.get(self.name, []) if item is not None)
+        return sum(1 for item in self.db.get(self.name, []) if not _is_tombstone(item))
 
     def __getitem__(self, item):
         if not isinstance(item, int):
@@ -249,19 +261,20 @@ class JsonDatabase(dict):
         else:
             item_id = item
         raw = self.db[self.name]
-        if item_id >= len(raw) or raw[item_id] is None:
+        if item_id >= len(raw) or _is_tombstone(raw[item_id]):
             raise InvalidItemID
         return raw[item_id]
 
     def __setitem__(self, item_id, value):
-        if not isinstance(item_id, int) or item_id >= len(self.db[self.name]) or item_id < 0:
+        raw = self.db[self.name]
+        if (not isinstance(item_id, int) or item_id < 0
+                or item_id >= len(raw) or _is_tombstone(raw[item_id])):
             raise InvalidItemID
-        else:
-            self.update_item(item_id, value)
+        self.update_item(item_id, value)
 
     def __iter__(self):
         for item in self.db[self.name]:
-            if item is not None:
+            if not _is_tombstone(item):
                 yield item
 
     def __contains__(self, item):
@@ -304,7 +317,7 @@ class JsonDatabase(dict):
         value = jsonify_recursively(value)
         matches = []
         for idx, item in enumerate(self.db[self.name]):
-            if item is None:
+            if _is_tombstone(item):
                 continue
 
             # TODO match strategy
@@ -360,19 +373,20 @@ class JsonDatabase(dict):
         self.db[self.name][item_id] = new_item
 
     def remove_item(self, item_id):
-        """Mark item_id as revoked (None tombstone).
+        """Mark item_id as revoked (tombstone sentinel).
 
         The slot is retained so all subsequent item IDs remain stable.
         Revoked entries are invisible to iteration, search, and __contains__.
+        Accessing a revoked slot via __getitem__ raises InvalidItemID.
         """
         if item_id < 0 or item_id >= len(self.db[self.name]):
             raise InvalidItemID
-        self.db[self.name][item_id] = None
+        self.db[self.name][item_id] = _TOMBSTONE
 
     # search
     def search_by_key(self, key, fuzzy=False, thresh=0.7, include_empty=False):
         results = []
-        for item in self:  # skips None tombstones
+        for item in self:  # skips tombstone slots
             if not isinstance(item, dict):
                 continue
             if fuzzy:
@@ -383,7 +397,7 @@ class JsonDatabase(dict):
 
     def search_by_value(self, key, value, fuzzy=False, thresh=0.7):
         results = []
-        for item in self:  # skips None tombstones
+        for item in self:  # skips tombstone slots
             if not isinstance(item, dict):
                 continue
             if fuzzy:
