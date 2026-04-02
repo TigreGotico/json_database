@@ -57,9 +57,9 @@ class Query:
             self.result = after
         elif ignore_case:
             self.result = [a for a in self.result
-                           if a.get(key) or a.get(key.lower())]
+                           if key in a or key.lower() in a]
         else:
-            self.result = [a for a in self.result if a.get(key)]
+            self.result = [a for a in self.result if key in a]
         return self
 
     def contains_value(self, key, value, fuzzy=False, thresh=0.75, ignore_case=False):
