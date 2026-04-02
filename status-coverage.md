@@ -4,7 +4,7 @@
 
 ### New Test Files
 - [x] Create `test/test_exceptions.py` — exception class tests (InvalidItemID, DatabaseNotCommitted, SessionError, MatchError)
-- [ ] Create `test/test_xdg_utils.py` — xdg path helper tests (xdg_cache_home, xdg_data_home, xdg_config_home)
+- [x] Create `test/test_xdg_utils.py` — xdg path helper tests (xdg_cache_home, xdg_data_home, xdg_config_home)
 
 ### Expanded Tests
 - [ ] Expand `test/test_storage.py` — error handling (reload failure, store errors, logging)
