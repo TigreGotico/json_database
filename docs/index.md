@@ -18,10 +18,10 @@ Both abstractions have XDG-compliant variants that resolve paths according to th
 | `JsonStorage` | Persistent dict backed by a JSON file | `json_database/__init__.py:23` |
 | `EncryptedJsonStorage` | AES-GCM encrypted variant of JsonStorage | `json_database/__init__.py:124` |
 | `JsonDatabase` | Searchable list-of-records database | `json_database/__init__.py:182` |
-| `JsonStorageXDG` | JsonStorage placed in XDG cache dir | `json_database/__init__.py:385` |
-| `EncryptedJsonStorageXDG` | EncryptedJsonStorage in XDG data dir | `json_database/__init__.py:405` |
-| `JsonDatabaseXDG` | JsonDatabase placed in XDG data dir | `json_database/__init__.py:421` |
-| `JsonConfigXDG` | JsonStorage placed in XDG config dir | `json_database/__init__.py:440` |
+| `JsonStorageXDG` | JsonStorage placed in XDG cache dir | `json_database/__init__.py:398` |
+| `EncryptedJsonStorageXDG` | EncryptedJsonStorage in XDG data dir | `json_database/__init__.py:418` |
+| `JsonDatabaseXDG` | JsonDatabase placed in XDG data dir | `json_database/__init__.py:434` |
+| `JsonConfigXDG` | JsonStorage placed in XDG config dir | `json_database/__init__.py:453` |
 | `Query` | Fluent filter builder for JsonDatabase | `json_database/search.py:5` |
 
 ## Contents

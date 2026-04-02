@@ -122,8 +122,11 @@ dict in memory. The file on disk always contains ciphertext.
 A searchable list-of-records database backed by a `JsonStorage`. Records are
 stored as a JSON array under a named key inside the file.
 
-> **Warning:** Item IDs are list indices. They shift when items are removed.
-> Never persist an `item_id` across sessions.
+> **Note:** Item IDs are stable list indices. `remove_item` tombstones the
+> slot (`None`) rather than shifting subsequent IDs, so an ID obtained from
+> `add_item` or `get_item_id` remains valid for the lifetime of the database
+> file. Tombstoned slots are invisible to iteration, search, `__contains__`,
+> and `__len__`; accessing one raises `InvalidItemID`.
 
 ### Constructor
 
@@ -142,18 +145,18 @@ JsonDatabase(name: str, path: str = None, disable_lock: bool = False, extension:
 
 | Operation | Behaviour |
 |---|---|
-| `len(db)` | Number of records |
-| `db[item_id]` | Fetch record by integer index; also accepts a string that can be cast to `int` |
-| `db[item_id] = value` | Replace record at index (calls `update_item`) |
-| `item in db` | Exact equality check across all records |
-| `iter(db)` | Yields all records in order |
-| `repr(db)` | JSON-serialisable string of all records |
+| `len(db)` | Count of live (non-tombstoned) records — `json_database/__init__.py:239` |
+| `db[item_id]` | Fetch live record by stable integer index; also accepts a string that can be cast to `int`; raises `InvalidItemID` for tombstoned slots — `json_database/__init__.py:241` |
+| `db[item_id] = value` | Replace record at index (calls `update_item`); raises `InvalidItemID` if index is out of range — `json_database/__init__.py:256` |
+| `item in db` | Exact equality check across all records (including tombstone slots, which are `None` and never equal a user item) |
+| `iter(db)` | Yields only live (non-`None`) records in index order — `json_database/__init__.py:262` |
+| `repr(db)` | JSON-serialisable string of all live records |
 
 ### CRUD Methods
 
 #### `add_item(value, allow_duplicates: bool = False) -> int`
 
-`json_database/__init__.py:288`
+`json_database/__init__.py:290`
 
 Adds `value` to the database. Objects are serialised via `jsonify_recursively`
 before storage. Returns the new length of the database.
@@ -163,32 +166,36 @@ the existing item's ID instead of adding a duplicate.
 
 #### `update_item(item_id: int, new_item) -> None`
 
-`json_database/__init__.py:356`
+`json_database/__init__.py:357`
 
 Replaces the record at `item_id` with `new_item`.
 
 #### `remove_item(item_id: int)`
 
-`json_database/__init__.py:364`
+`json_database/__init__.py:362`
 
-Removes and returns the record at `item_id`. All subsequent IDs shift down by one.
+Tombstones the slot at `item_id` by setting it to `None`. The slot is retained
+so that all higher item IDs remain stable. Raises `InvalidItemID` if `item_id`
+is out of range. The removed entry becomes invisible to `__iter__`, `__len__`,
+`search_by_key`, `search_by_value`, and `__contains__`; accessing it via
+`db[item_id]` raises `InvalidItemID`.
 
 #### `get_item_id(item) -> int`
 
-`json_database/__init__.py:347`
+`json_database/__init__.py:351`
 
 Returns the index of `item` using exact equality, or `-1` if not found.
 
 #### `match_item(value, match_strategy=None) -> list`
 
-`json_database/__init__.py:298`
+`json_database/__init__.py:300`
 
 Returns a list of `(item, index)` tuples for all exact matches. `match_strategy`
 is accepted but currently unused; only exact equality is implemented.
 
 #### `merge_item(value, item_id=None, match_strategy=None, merge_strategy=None) -> None`
 
-`json_database/__init__.py:318`
+`json_database/__init__.py:322`
 
 Finds the matching item and merges `value` into it using `merge_dict`. Raises
 `MatchError` if no match is found and `item_id` is not provided. `merge_strategy`
@@ -196,14 +203,14 @@ is accepted but currently unused.
 
 #### `replace_item(value, item_id=None, match_strategy=None) -> None`
 
-`json_database/__init__.py:336`
+`json_database/__init__.py:340`
 
 Finds the matching item and replaces it entirely with `value`. Raises `MatchError`
 if no match and no `item_id`.
 
 #### `append(value) -> int`
 
-`json_database/__init__.py:283`
+`json_database/__init__.py:285`
 
 Unconditionally appends `value` (serialised). Returns the new length. Prefer
 `add_item` for duplicate control.
@@ -212,21 +219,21 @@ Unconditionally appends `value` (serialised). Returns the new length. Prefer
 
 #### `commit() -> None`
 
-`json_database/__init__.py:270`
+`json_database/__init__.py:272`
 
 Writes the database to disk via `JsonStorage.store()`. Must be called explicitly
 when not using the context manager.
 
 #### `reset() -> None`
 
-`json_database/__init__.py:276`
+`json_database/__init__.py:278`
 
 Discards in-memory changes by reloading from disk. Raises `DatabaseNotCommitted`
 if the file does not exist.
 
 #### `print() -> None`
 
-`json_database/__init__.py:279`
+`json_database/__init__.py:281`
 
 Pretty-prints all records to stdout.
 
@@ -239,18 +246,18 @@ on failure.
 
 #### `search_by_key(key: str, fuzzy: bool = False, thresh: float = 0.7, include_empty: bool = False) -> list`
 
-`json_database/__init__.py:372`
+`json_database/__init__.py:373`
 
-Recursively searches all records for the presence of `key`.
+Iterates only live (non-tombstoned) records and returns those containing `key`.
 
 - Exact mode: returns a list of dicts (the records that contain the key).
 - Fuzzy mode: returns a list of `(record, score)` tuples sorted by descending score.
 
 #### `search_by_value(key: str, value, fuzzy: bool = False, thresh: float = 0.7) -> list`
 
-`json_database/__init__.py:377`
+`json_database/__init__.py:384`
 
-Recursively searches all records for records where `key == value`.
+Iterates only live (non-tombstoned) records and returns those where `key == value`.
 
 - Exact mode: returns a list of matching records.
 - Fuzzy mode: returns a list of `(record, score)` tuples sorted by descending score.
@@ -264,7 +271,7 @@ construction time. See [XDG Paths](XDG.md) for full details.
 
 ### JsonStorageXDG
 
-`json_database/__init__.py:385`
+`json_database/__init__.py:398`
 
 ```python
 JsonStorageXDG(name: str, xdg_folder=xdg_cache_home(), disable_lock=False,
@@ -276,7 +283,7 @@ Default path: `~/.cache/json_database/{name}.json`.
 
 ### EncryptedJsonStorageXDG
 
-`json_database/__init__.py:405`
+`json_database/__init__.py:418`
 
 ```python
 EncryptedJsonStorageXDG(encrypt_key: str, name: str, xdg_folder=xdg_data_home(),
@@ -287,7 +294,7 @@ Default path: `~/.local/share/json_database/{name}.ejson`.
 
 ### JsonDatabaseXDG
 
-`json_database/__init__.py:421`
+`json_database/__init__.py:434`
 
 ```python
 JsonDatabaseXDG(name: str, xdg_folder=xdg_data_home(), disable_lock=False,
@@ -298,7 +305,7 @@ Default path: `~/.local/share/json_database/{name}.jsondb`.
 
 ### JsonConfigXDG
 
-`json_database/__init__.py:440`
+`json_database/__init__.py:453`
 
 ```python
 JsonConfigXDG(name: str, xdg_folder=xdg_config_home(), disable_lock=False,
