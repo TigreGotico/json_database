@@ -381,3 +381,171 @@ class TestJsonDatabase:
         new_id_c = db.get_item_id({"id": "C"})
         assert new_id_c == 1  # Shifted from 2
         assert new_id_c != id_c  # NOT stable!
+
+
+class TestJsonDatabaseErrorHandling:
+    """Test error handling and edge cases in JsonDatabase."""
+
+    def test_getitem_with_string_index(self, temp_db_path):
+        """Test __getitem__ with string index that converts to int."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        db.add_item({"id": 2})
+        # String index that converts to int
+        assert db["0"] == {"id": 1}
+        assert db["1"] == {"id": 2}
+
+    def test_getitem_with_invalid_int_index(self, temp_db_path):
+        """Test __getitem__ raises InvalidItemID for out-of-bounds int."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        with pytest.raises(InvalidItemID):
+            _ = db[99]
+
+    def test_getitem_with_dict_lookup(self, temp_db_path):
+        """Test __getitem__ with dict lookup (get_item_id)."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice"})
+        db.add_item({"id": 2, "name": "Bob"})
+        # Lookup by exact item match
+        item = db[{"id": 1, "name": "Alice"}]
+        assert item == {"id": 1, "name": "Alice"}
+
+    def test_getitem_with_missing_dict(self, temp_db_path):
+        """Test __getitem__ raises InvalidItemID when dict not found."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        with pytest.raises(InvalidItemID):
+            _ = db[{"id": 999}]
+
+    def test_setitem_invalid_index_negative(self, temp_db_path):
+        """Test __setitem__ with negative index raises InvalidItemID."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        with pytest.raises(InvalidItemID):
+            db[-1] = {"id": 2}
+
+    def test_setitem_out_of_bounds(self, temp_db_path):
+        """Test __setitem__ with out-of-bounds index raises InvalidItemID."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        with pytest.raises(InvalidItemID):
+            db[10] = {"id": 2}
+
+    def test_setitem_with_non_int(self, temp_db_path):
+        """Test __setitem__ with non-int string raises InvalidItemID."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+        with pytest.raises(InvalidItemID):
+            db["invalid"] = {"id": 2}
+
+    def test_context_manager_exception_handling(self, tmp_path):
+        """Test context manager raises SessionError on commit failure."""
+        test_db = str(tmp_path / "test.json")
+        db = JsonDatabase("test", path=test_db, disable_lock=True)
+        # First create the db file
+        db.add_item({"id": 1})
+        db.commit()
+        # Remove permissions to cause failure
+        import os
+        try:
+            with pytest.raises(SessionError):
+                os.chmod(test_db, 0o444)  # Read-only
+                with db:
+                    db.add_item({"id": 2})
+        finally:
+            os.chmod(test_db, 0o644)  # Restore
+
+    def test_merge_item_with_explicit_match(self, temp_db_path):
+        """Test merge_item with explicit item_id to avoid match logic."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice", "age": 25})
+
+        # Using explicit item_id avoids the match_item logic
+        new_value = {"id": 1, "name": "Alice", "age": 26}
+        db.merge_item(new_value, item_id=0)
+
+        # Verify merge happened
+        item = db[0]
+        assert item["age"] == 26
+        assert item["name"] == "Alice"
+
+    def test_merge_item_no_match_raises_matcherror(self, temp_db_path):
+        """Test merge_item raises MatchError when no match found."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice"})
+
+        with pytest.raises(MatchError):
+            db.merge_item({"id": 999})
+
+    def test_merge_item_with_explicit_item_id(self, temp_db_path):
+        """Test merge_item with explicit item_id bypasses matching."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice", "age": 25})
+
+        # Merge at index 0 regardless of field matching
+        db.merge_item({"age": 30}, item_id=0)
+
+        assert db[0]["age"] == 30
+        assert db[0]["name"] == "Alice"
+
+    def test_replace_item_no_match_raises_matcherror(self, temp_db_path):
+        """Test replace_item raises MatchError when no match found."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice"})
+
+        with pytest.raises(MatchError):
+            db.replace_item({"id": 999})
+
+    def test_replace_item_with_explicit_item_id(self, temp_db_path):
+        """Test replace_item with explicit item_id."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "Alice"})
+
+        db.replace_item({"id": 2, "name": "Bob"}, item_id=0)
+
+        assert db[0] == {"id": 2, "name": "Bob"}
+
+    def test_append_and_add_item_difference(self, temp_db_path):
+        """Test difference between append (always adds) and add_item (checks duplicates)."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        item = {"id": 1}
+
+        # append always adds
+        db.append(item)
+        assert len(db) == 1
+
+        # add_item with duplicates=False returns existing index
+        result = db.add_item(item)
+        assert result == 0  # Returns index of existing
+        assert len(db) == 1  # No new item added
+
+    def test_get_item_id_not_found_returns_negative(self, temp_db_path):
+        """Test get_item_id returns -1 when item not found."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1})
+
+        item_id = db.get_item_id({"id": 999})
+        assert item_id == -1
+
+    def test_database_repr(self, temp_db_path):
+        """Test __repr__ returns string representation."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        db.add_item({"id": 1, "name": "test"})
+
+        repr_str = repr(db)
+        assert isinstance(repr_str, str)
+        assert "test" in repr_str or "1" in repr_str
+
+    def test_database_iteration_with_objects(self, temp_db_path):
+        """Test iteration through database items."""
+        db = JsonDatabase("test", path=temp_db_path, disable_lock=True)
+        items = [{"id": i} for i in range(3)]
+        for item in items:
+            db.add_item(item)
+
+        # Iterate and verify
+        iterated_items = list(db)
+        assert len(iterated_items) == 3
+        for i, item in enumerate(iterated_items):
+            assert item["id"] == i

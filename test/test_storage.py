@@ -7,6 +7,91 @@ from json_database import JsonStorage
 from json_database.exceptions import DatabaseNotCommitted, SessionError
 
 
+class TestJsonStorageErrorHandling:
+    """Test error handling and exception paths in JsonStorage."""
+
+    def test_load_nonexistent_file(self, temp_db_path):
+        """Test loading from non-existent file."""
+        fake_path = temp_db_path.replace("test.json", "nonexistent.json")
+        storage = JsonStorage(fake_path, disable_lock=True)
+        # Should not raise, just load empty
+        assert len(storage) == 0
+
+    def test_load_corrupted_json(self, tmp_path):
+        """Test loading corrupted JSON file."""
+        bad_file = tmp_path / "corrupt.json"
+        bad_file.write_text("{bad json content")
+        storage = JsonStorage(str(bad_file), disable_lock=True)
+        # Should log error but not raise
+        assert len(storage) == 0
+
+    def test_reload_when_file_not_exists(self, tmp_path):
+        """Test reload() raises DatabaseNotCommitted when file doesn't exist."""
+        fake_path = str(tmp_path / "nonexistent.json")
+        storage = JsonStorage(fake_path, disable_lock=True)
+        storage["key"] = "value"
+        # File was never created, so reload should fail
+        with pytest.raises(DatabaseNotCommitted):
+            storage.reload()
+
+    def test_store_without_path(self, tmp_path):
+        """Test store with no path set."""
+        storage = JsonStorage("", disable_lock=True)
+        storage["key"] = "value"
+        # Should not raise, just log warning
+        storage.store()
+
+    def test_context_manager_with_exception(self, tmp_path):
+        """Test context manager propagates SessionError on store failure."""
+        test_file = str(tmp_path / "test.json")
+        storage = JsonStorage(test_file, disable_lock=True)
+        storage["key"] = "value"
+        storage.store()  # Create the file first
+        # Now remove write permissions to cause store to fail
+        try:
+            with pytest.raises(SessionError):
+                with storage:
+                    storage["key"] = "modified"
+                    os.chmod(test_file, 0o444)  # Read-only
+        finally:
+            os.chmod(test_file, 0o644)  # Restore permissions
+
+    def test_merge_with_various_flags(self, temp_db_path):
+        """Test merge with different parameter combinations."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["list"] = [1, 2]
+        storage["key"] = "value"
+
+        delta = {"list": [2, 3], "new": "item"}
+        result = storage.merge(delta, merge_lists=True, skip_empty=False,
+                              no_dupes=True, new_only=False)
+        assert 1 in result["list"]
+        assert 3 in result["list"]
+        assert result["new"] == "item"
+
+    def test_clear_method(self, temp_db_path):
+        """Test clear method removes all items."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["a"] = 1
+        storage["b"] = 2
+        storage.clear()
+        assert len(storage) == 0
+
+    def test_remove_file_method(self, temp_db_path):
+        """Test remove method deletes the file."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+        assert os.path.exists(temp_db_path)
+        storage.remove()
+        assert not os.path.exists(temp_db_path)
+
+    def test_remove_nonexistent_file(self, tmp_path):
+        """Test remove on non-existent file doesn't raise."""
+        storage = JsonStorage(str(tmp_path / "fake.json"), disable_lock=True)
+        storage.remove()  # Should not raise
+
+
 class TestJsonStorage:
     """Test suite for JsonStorage persistent dict."""
 

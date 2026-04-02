@@ -252,3 +252,33 @@ class TestEncryptedJsonStorage:
         assert os.path.exists(temp_db_path)
         storage.remove()
         assert not os.path.exists(temp_db_path)
+
+    def test_reload_encrypted_with_corrupted_data(self, temp_db_path, encryption_key):
+        """Test reload with corrupted encrypted data doesn't raise but loads empty."""
+        storage = EncryptedJsonStorage(encryption_key, temp_db_path, disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+
+        # Corrupt the file
+        with open(temp_db_path, 'w') as f:
+            f.write("{bad json}")
+
+        # Reload should not raise but load as empty dict (error is logged)
+        storage2 = EncryptedJsonStorage(encryption_key, temp_db_path, disable_lock=True)
+        assert len(storage2) == 0  # Corrupted data results in empty storage
+
+    def test_encrypted_storage_with_context_manager_error(self, tmp_path, encryption_key):
+        """Test context manager error handling with encrypted storage."""
+        test_file = str(tmp_path / "test.json")
+        storage = EncryptedJsonStorage(encryption_key, test_file, disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+
+        # Try to store with read-only permissions
+        try:
+            with pytest.raises(SessionError):
+                os.chmod(test_file, 0o444)
+                with storage:
+                    storage["key"] = "modified"
+        finally:
+            os.chmod(test_file, 0o644)
