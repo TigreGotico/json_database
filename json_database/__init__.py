@@ -227,9 +227,13 @@ class JsonDatabase(dict):
         super().__init__()
         self.name = name
         self.path = path or f"{name}.{extension}"
+        self._active_count = 0
         self.db = JsonStorage(self.path, disable_lock=disable_lock)
         self.db[name] = []
         self.db.load_local(self.path)
+        self._active_count = sum(
+            1 for item in self.db.get(name, []) if not _is_tombstone(item)
+        )
 
     # operator overloads
     def __enter__(self):
@@ -248,7 +252,7 @@ class JsonDatabase(dict):
         return str(jsonify_recursively(self))
 
     def __len__(self):
-        return sum(1 for item in self.db.get(self.name, []) if not _is_tombstone(item))
+        return self._active_count
 
     def __getitem__(self, item):
         if not isinstance(item, int):
@@ -290,6 +294,9 @@ class JsonDatabase(dict):
 
     def reset(self):
         self.db.reload()
+        self._active_count = sum(
+            1 for item in self.db.get(self.name, []) if not _is_tombstone(item)
+        )
 
     def print(self):
         pprint(jsonify_recursively(self))
@@ -298,7 +305,8 @@ class JsonDatabase(dict):
     def append(self, value):
         value = jsonify_recursively(value)
         self.db[self.name].append(value)
-        return len(self)
+        self._active_count += 1
+        return self._active_count
 
     def add_item(self, value, allow_duplicates=False):
         """ add an item to database
@@ -381,6 +389,8 @@ class JsonDatabase(dict):
         """
         if item_id < 0 or item_id >= len(self.db[self.name]):
             raise InvalidItemID
+        if not _is_tombstone(self.db[self.name][item_id]):
+            self._active_count -= 1
         self.db[self.name][item_id] = _TOMBSTONE
 
     # search
