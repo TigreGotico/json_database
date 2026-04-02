@@ -10,6 +10,7 @@ import tempfile
 import os
 from json_database import JsonDatabase
 from json_database.search import Query
+from json_database.exceptions import InvalidItemID
 
 
 @pytest.fixture
@@ -123,8 +124,8 @@ class TestUserDatabaseE2E:
         assert len(results) == 1
         assert results[0]["id"] == 4
 
-    def test_remove_and_reactivate_user(self, user_db_path):
-        """Test removing and conditionally reactivating a user."""
+    def test_remove_user_tombstone_behavior(self, user_db_path):
+        """Test tombstone semantics: removed item slot is inaccessible but indices remain stable."""
         db = JsonDatabase("users", path=user_db_path, disable_lock=True)
 
         users = [
@@ -141,11 +142,11 @@ class TestUserDatabaseE2E:
         db.remove_item(1)
         assert len(db) == 2
 
-        # The slot is still there but inaccessible
-        with pytest.raises(Exception):  # InvalidItemID
+        # The slot is still there but raises InvalidItemID on access
+        with pytest.raises(InvalidItemID):
             db[1]
 
-        # Remaining users are intact
+        # Remaining users are intact; indices are stable
         results = Query(db).equal("status", "active").build()
         assert len(results) == 2
         assert all(u["name"] in ["Alice", "Carol"] for u in results)

@@ -121,14 +121,23 @@ class Query:
                     continue
                 if isinstance(v, str) and value.lower() in v.lower():
                     after.append(a)
-                elif value.lower() in v or value in v:
+                elif isinstance(v, (list, tuple, set)):
+                    # Safe membership check for iterables
+                    if value.lower() in [str(x).lower() for x in v]:
+                        after.append(a)
+                elif isinstance(v, dict) and value.lower() in [str(x).lower() for x in v.keys()]:
                     after.append(a)
         else:
             for a in self.result:
                 try:
-                    if value in _get_value(a, key):
+                    v = _get_value(a, key)
+                    # Only check membership for iterables and strings
+                    if isinstance(v, (str, list, tuple, set)):
+                        if value in v:
+                            after.append(a)
+                    elif isinstance(v, dict) and value in v.keys():
                         after.append(a)
-                except KeyError:
+                except (KeyError, TypeError):
                     pass
         self.result = after
         return self
@@ -169,7 +178,9 @@ class Query:
                     after.append(e)
                 elif value in v.split(" "):
                     after.append(e)
-            elif value in v:
+            elif isinstance(v, (list, tuple, set)) and value in v:
+                after.append(e)
+            elif isinstance(v, dict) and value in v.keys():
                 after.append(e)
         self.result = after
         return self
