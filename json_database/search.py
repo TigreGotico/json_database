@@ -1,5 +1,5 @@
 from json_database.utils import fuzzy_match, match_one
-from json_database import JsonDatabase
+from json_database import JsonDatabase, _is_tombstone  # noqa: F401 used in __init__
 
 
 def _resolve_key(record, key, ignore_case=False):
@@ -60,7 +60,10 @@ class Query:
             db: JsonDatabase instance or dict to filter
         """
         if isinstance(db, JsonDatabase):
-            self.result = list(db)
+            # Iterate the raw backing list directly, skipping tombstones, without
+            # going through __iter__ which applies additional protocol overhead.
+            raw = db.db[db.name]
+            self.result = [e for e in raw if not _is_tombstone(e)]
         else:
             self.result = [db]
 
