@@ -6,7 +6,7 @@
 - [x] Fix `remove_item` stable IDs — tombstone None, fix `__iter__` and `match_item`
 - [x] Fix `search_by_key` / `search_by_value` wrong scope (`__init__.py`)
 - [x] Fix `contains_key` ignore_case falsy values (`search.py`)
-- [ ] Optimise `jsonify_recursively` — replace try/except with isinstance (`utils.py`)
+- [x] Optimise `jsonify_recursively` — replace try/except with isinstance (`utils.py`)
 - [ ] Fix `uncomment_json` — use `\n` join instead of space (`utils.py`)
 - [ ] Narrow bare `except` in search helpers to `except AttributeError` (`utils.py`)
 

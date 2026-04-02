@@ -324,17 +324,12 @@ def jsonify_recursively(thing):
         for idx, item in enumerate(thing):
             jsonified[idx] = jsonify_recursively(item)
     elif isinstance(thing, dict):
-        try:
-            # can't import at top level to do proper check
-            jsonified = dict(thing.db)
-        except:
-            jsonified = dict(thing)
+        # JsonStorage-like objects expose their backing store via .db
+        jsonified = dict(thing.db) if hasattr(thing, 'db') else dict(thing)
         for key in jsonified.keys():
-            value = jsonified[key]
-            jsonified[key] = jsonify_recursively(value)
+            jsonified[key] = jsonify_recursively(jsonified[key])
+    elif hasattr(thing, '__dict__'):
+        jsonified = thing.__dict__
     else:
-        try:
-            jsonified = thing.__dict__
-        except:
-            jsonified = thing
+        jsonified = thing
     return jsonified
