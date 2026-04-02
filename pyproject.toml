@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "json_database"
+version = "0.10.2a1"
+description = "searchable json database with persistence"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "jarbasAI", email = "jarbasai@mailfence.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "combo_lock>=0.2.1,<1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/TigreGotico/json_database"
+
+[project.entry-points."hivemind.database"]
+"hivemind-json-db-plugin" = "json_database.hpm:JsonDB"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["json_database*"]
+
+[tool.setuptools.package-data]
+"*" = ["*"]
