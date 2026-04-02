@@ -3,7 +3,37 @@ from json_database import JsonDatabase
 
 
 class Query:
+    """Fluent filter builder for querying JsonDatabase items.
+
+    Provides chainable filter methods for searching and filtering database
+    records. Each method narrows the result set and returns self for chaining.
+
+    Attributes:
+        result (list): Current filtered results
+
+    Example:
+        from json_database.search import Query
+
+        db = JsonDatabase("products")
+        # ... add items ...
+
+        # Chain filters
+        query = Query(db)
+        results = (query
+                   .equal("category", "Electronics")
+                   .below("price", 100)
+                   .equal("in_stock", True)
+                   .build())
+
+        for item in results:
+            print(item["name"])
+    """
     def __init__(self, db):
+        """Initialize Query from database or single item.
+
+        Args:
+            db: JsonDatabase instance or dict to filter
+        """
         if isinstance(db, JsonDatabase):
             self.result = list(db)
         else:
@@ -161,9 +191,19 @@ class Query:
         return self
 
     def all(self):
+        """No-op filter that returns all items (identity).
+
+        Returns:
+            self for chaining
+        """
         return self
 
     def build(self):
+        """Return the current filtered result list.
+
+        Returns:
+            list: Filtered items matching all applied filters
+        """
         return self.result
 
 
