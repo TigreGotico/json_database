@@ -3,7 +3,7 @@
 ## Checklist
 
 - [x] Fix `merge_item` / `replace_item` unpacking bug (`__init__.py`)
-- [ ] Fix `remove_item` stable IDs — tombstone None, fix `__iter__` and `match_item`
+- [x] Fix `remove_item` stable IDs — tombstone None, fix `__iter__` and `match_item`
 - [ ] Fix `search_by_key` / `search_by_value` wrong scope (`__init__.py`)
 - [ ] Fix `contains_key` ignore_case falsy values (`search.py`)
 - [ ] Optimise `jsonify_recursively` — replace try/except with isinstance (`utils.py`)

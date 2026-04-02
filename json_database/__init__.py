@@ -260,7 +260,8 @@ class JsonDatabase(dict):
 
     def __iter__(self):
         for item in self.db[self.name]:
-            yield item
+            if item is not None:
+                yield item
 
     def __contains__(self, item):
         item = jsonify_recursively(item)
@@ -301,7 +302,9 @@ class JsonDatabase(dict):
         """
         value = jsonify_recursively(value)
         matches = []
-        for idx, item in enumerate(self):
+        for idx, item in enumerate(self.db[self.name]):
+            if item is None:
+                continue
 
             # TODO match strategy
             # - require exact match
@@ -345,28 +348,25 @@ class JsonDatabase(dict):
 
     # item_id
     def get_item_id(self, item):
-        """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
+        """Return the stable list index of item, or -1 if not found."""
         for match, idx in self.match_item(item):
             return idx
         return -1
 
     def update_item(self, item_id, new_item):
-        """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
+        """Replace the item at item_id with new_item (stable index)."""
         new_item = jsonify_recursively(new_item)
         self.db[self.name][item_id] = new_item
 
     def remove_item(self, item_id):
+        """Mark item_id as revoked (None tombstone).
+
+        The slot is retained so all subsequent item IDs remain stable.
+        Revoked entries are invisible to iteration, search, and __contains__.
         """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
-        return self.db[self.name].pop(item_id)
+        if item_id < 0 or item_id >= len(self.db[self.name]):
+            raise InvalidItemID
+        self.db[self.name][item_id] = None
 
     # search
     def search_by_key(self, key, fuzzy=False, thresh=0.7, include_empty=False):
