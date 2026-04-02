@@ -7,4 +7,4 @@
 - [x] 3. `contains_value` single-pass — remove pre-filter (`search.py`)
 - [x] 4. `fuzzy_match` lru_cache (`utils.py`)
 - [x] 5. `uncomment_json` compiled regex (`utils.py`)
-- [ ] 6. `jsonify_recursively` scalar short-circuit (`utils.py`)
+- [x] 6. `jsonify_recursively` scalar short-circuit (`utils.py`)

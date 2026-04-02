@@ -312,6 +312,8 @@ def get_value_recursively_fuzzy(search_dict, field, target_value, thresh=0.6):
 
 
 def jsonify_recursively(thing):
+    if thing is None or isinstance(thing, (bool, int, float, str)):
+        return thing
     if isinstance(thing, list):
         jsonified = list(thing)
         for idx, item in enumerate(thing):
