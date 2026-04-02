@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased](https://github.com/TigreGotico/json_database/tree/HEAD)
+
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.2a1...HEAD)
+
+**Merged pull requests:**
+
+- chore: test coverage improvements + comprehensive docs [\#21](https://github.com/TigreGotico/json_database/pull/21) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.2a1](https://github.com/TigreGotico/json_database/tree/0.10.2a1) (2025-12-20)
 
 [Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.1...0.10.2a1)
