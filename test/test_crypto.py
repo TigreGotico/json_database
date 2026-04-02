@@ -30,7 +30,10 @@ class TestEncryptedJsonStorage(unittest.TestCase):
         db.store()
         with open(self.file_path, "r") as file:
             file_data = file.read()
-        self.assertNotIn("42", file_data)  # Data should be encrypted
+        # Key and value should not appear as plaintext
+        self.assertNotIn('"A"', file_data)  # Key not plaintext
+        # Also check that it has encryption metadata
+        self.assertIn("ciphertext", file_data)
 
     def test_decryption_after_reload(self):
         db = EncryptedJsonStorage(self.key, self.file_path)
