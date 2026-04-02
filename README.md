@@ -298,23 +298,15 @@ This ensures your application respects user preferences for where application da
 
 ## HiveMind Integration
 
-This library provides seamless integration with the HiveMind voice assistant ecosystem:
+This library provides a persistent JSON database plugin for the HiveMind voice assistant ecosystem.
 
-```python
-# Use as a HiveMind plugin for distributed knowledge storage
-from json_database.hpm import JsonDatabasePlugin
+**HiveMind Plugin Features:**
+- `hivemind-json-db-plugin` entry point for seamless integration with HiveMind plugin manager
+- User database for storing client credentials and access control lists (ACLs)
+- Flexible key-value storage for HiveMind configuration and user management
+- Optional AES-GCM encryption support for sensitive credential storage
+- Recursive search and filtering capabilities for finding users and permissions
 
-plugin = JsonDatabasePlugin()
+The json_database serves as the backend storage for HiveMind's user authentication and permission system, allowing distributed voice assistant networks to manage client identities and ACLs consistently across nodes.
 
-# Store and retrieve data across the HiveMind network
-plugin.store_item({"knowledge": "data"})
-results = plugin.search_by_value("field", "value")
-```
-
-**Database Plugin Features:**
-- `hivemind-json-db-plugin` entry point for plugin manager
-- Client credentials and permissions storage
-- Distributed query support across HiveMind nodes
-- Encryption support for sensitive data
-
-See [HiveMind documentation](https://github.com/JarbasHiveMind) for full integration details.
+See [HiveMind documentation](https://github.com/JarbasHiveMind) for integration details and configuration examples.
