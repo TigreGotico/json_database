@@ -21,8 +21,23 @@ LOG.setLevel("INFO")
 
 
 class JsonStorage(dict):
-    """
-    persistent python dict
+    """Persistent Python dictionary stored as JSON on disk.
+
+    A dict subclass that automatically loads and saves data to a JSON file.
+    Supports file locking for concurrent access and commented JSON loading.
+
+    Attributes:
+        path (str): File path where data is stored
+        lock: Lock object (ComboLock or DummyLock) for thread/process safety
+
+    Example:
+        storage = JsonStorage("config.json")
+        storage["key"] = "value"
+        storage.store()  # Save to disk
+
+        # Context manager auto-saves on exit
+        with JsonStorage("config.json") as storage:
+            storage["setting"] = 123
     """
 
     def __init__(self, path, disable_lock=False):
@@ -107,7 +122,30 @@ class JsonStorage(dict):
 
 
 class EncryptedJsonStorage(JsonStorage):
-    """persistent python dict, stored AES encrypted to file"""
+    """Encrypted persistent Python dictionary using AES-GCM encryption.
+
+    Extends JsonStorage to encrypt data with AES-256-GCM (symmetric encryption).
+    Data is decrypted in memory but stored encrypted on disk.
+
+    **WARNING:** Keys > 16 bytes are silently truncated to 16 bytes.
+    **WARNING:** Item IDs (indices) are not stable across sessions.
+
+    Attributes:
+        encrypt_key (str): Encryption key (must be exactly 16 bytes)
+
+    Raises:
+        AssertionError: If encrypt_key is not exactly 16 bytes
+
+    Example:
+        key = "1234567890123456"  # 16 bytes
+        storage = EncryptedJsonStorage(key, "secret.json")
+        storage["password"] = "mypassword"
+        storage.store()  # Stored encrypted on disk
+
+        # Reload decrypts automatically
+        storage2 = EncryptedJsonStorage(key, "secret.json")
+        print(storage2["password"])  # "mypassword"
+    """
 
     def __init__(self, encrypt_key: str, path: str, disable_lock=False):
         assert len(encrypt_key) == 16
@@ -142,7 +180,32 @@ class EncryptedJsonStorage(JsonStorage):
 
 
 class JsonDatabase(dict):
-    """ searchable persistent dict """
+    """Searchable persistent list-of-records database backed by JSON.
+
+    A dict-like database that stores a list of records (items) and provides
+    search, filtering, and CRUD operations. All changes must be committed
+    to disk with commit() or via context manager.
+
+    **WARNING:** Item IDs are indices and shift when items are removed.
+    Do not persist item IDs across sessions.
+
+    Attributes:
+        name (str): Database name (dict key in JSON file)
+        path (str): File path where database is stored
+        db (JsonStorage): Underlying storage
+
+    Example:
+        db = JsonDatabase("users", path="db.json")
+        db.add_item({"id": 1, "name": "Alice"})
+        db.add_item({"id": 2, "name": "Bob"})
+
+        # Search and filter
+        from json_database.search import Query
+        query = Query(db).equal("name", "Alice")
+        results = query.build()
+
+        db.commit()  # Save to disk
+    """
 
     def __init__(self,
                  name,
@@ -320,7 +383,14 @@ class JsonDatabase(dict):
 # XDG aware classes
 
 class JsonStorageXDG(JsonStorage):
-    """ xdg respectful persistent dicts """
+    """XDG-compliant persistent dictionary using system cache directory.
+
+    Stores data in XDG_CACHE_HOME/json_database/ following Linux XDG spec.
+    Useful for application cache and temporary data.
+
+    Example:
+        storage = JsonStorageXDG("cache")  # ~/.cache/json_database/cache.json
+    """
 
     def __init__(self,
                  name,
@@ -349,7 +419,16 @@ class EncryptedJsonStorageXDG(EncryptedJsonStorage):
 
 
 class JsonDatabaseXDG(JsonDatabase):
-    """ xdg respectful json database """
+    """XDG-compliant searchable database using system data directory.
+
+    Stores database in XDG_DATA_HOME/json_database/ following Linux XDG spec.
+    Useful for application data that should persist across reboots.
+
+    Example:
+        db = JsonDatabaseXDG("users")  # ~/.local/share/json_database/users.jsondb
+        db.add_item({"id": 1, "name": "Alice"})
+        db.commit()
+    """
 
     def __init__(self, name, xdg_folder=xdg_data_home(),
                  disable_lock=False, subfolder="json_database",
@@ -359,7 +438,16 @@ class JsonDatabaseXDG(JsonDatabase):
 
 
 class JsonConfigXDG(JsonStorageXDG):
-    """ xdg respectful config files, using json_storage.JsonStorageXDG """
+    """XDG-compliant config storage using system config directory.
+
+    Stores configuration in XDG_CONFIG_HOME/json_database/ following Linux XDG spec.
+    Useful for application settings and preferences.
+
+    Example:
+        config = JsonConfigXDG("myapp")  # ~/.config/json_database/myapp.json
+        config["theme"] = "dark"
+        config.store()
+    """
 
     def __init__(self, name, xdg_folder=xdg_config_home(),
                  disable_lock=False, subfolder="json_database",
