@@ -1,5 +1,6 @@
 import json
 from difflib import SequenceMatcher
+from functools import lru_cache
 
 
 class DummyLock:
@@ -35,6 +36,7 @@ class DummyLock:
         pass
 
 
+@lru_cache(maxsize=4096)
 def fuzzy_match(x, against):
     """Perform a 'fuzzy' comparison between two strings.
     Returns:
