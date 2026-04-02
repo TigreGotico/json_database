@@ -597,7 +597,7 @@ class TestJsonDatabaseErrorHandling:
         assert db.get_item_id({"name": "bob"}) == 1
         assert db.get_item_id({"name": "unknown"}) == -1
 
-    def test_update_item(self, temp_db_path):
+    def test_update_item_replaces_slot(self, temp_db_path):
         """update_item replaces slot contents directly."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"v": 1})
@@ -615,7 +615,7 @@ class TestJsonDatabaseErrorHandling:
         with pytest.raises(InvalidItemID):
             db.remove_item(-1)
 
-    def test_search_by_key(self, temp_db_path):
+    def test_search_by_key_returns_matching(self, temp_db_path):
         """search_by_key returns items containing the given key."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"name": "alice", "age": 30})
@@ -646,7 +646,7 @@ class TestJsonDatabaseErrorHandling:
         assert len(results) == 1
         assert results[0]["name"] == "alice"
 
-    def test_search_by_value(self, temp_db_path):
+    def test_search_by_value_returns_matching(self, temp_db_path):
         """search_by_value returns items where key == value."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"role": "admin", "name": "alice"})
