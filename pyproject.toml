@@ -14,6 +14,17 @@ dependencies = [
     "combo_lock>=0.2.1,<1.0.0",
 ]
 
+[project.optional-dependencies]
+crypto = ["pycryptodomex"]
+test = [
+    "coveralls>=1.8.2",
+    "flake8>=3.7.9",
+    "pytest>=5.2.4",
+    "pytest-cov>=2.8.1",
+    "cov-core>=1.15.0",
+    "pycryptodomex",
+]
+
 [project.urls]
 Homepage = "https://github.com/TigreGotico/json_database"
 
