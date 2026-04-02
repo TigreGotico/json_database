@@ -1,15 +1,12 @@
-# NOTE: python-support.yml@dev is deprecated. This file calls build-tests.yml@dev instead.
-# You can rename this file to build-tests.yml if you don't already have one.
+# NOTE: Kept for workflow_dispatch only. build-tests.yml handles PR/push triggers.
 name: Build Tests
 
 on:
-  pull_request:
-    branches: [dev, master, main]
   workflow_dispatch:
 
 jobs:
   build_tests:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@e37a97650feada694abb6420a84bbd23a71d6bb1
     secrets: inherit
     with:
       package_name: 'json_database'

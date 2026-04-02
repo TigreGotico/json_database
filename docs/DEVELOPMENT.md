@@ -87,7 +87,7 @@ Coverage is uploaded to Codecov from the Python 3.12 matrix job.
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 feat: add fuzzy threshold parameter to Query.equal
 fix: handle empty list in merge_dict when no_dupes=True
 docs: sync API reference after EncryptedJsonStorage changes

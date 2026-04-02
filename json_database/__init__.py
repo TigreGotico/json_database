@@ -127,7 +127,7 @@ class EncryptedJsonStorage(JsonStorage):
     Extends JsonStorage to encrypt data with AES-256-GCM (symmetric encryption).
     Data is decrypted in memory but stored encrypted on disk.
 
-    **WARNING:** Keys > 16 bytes are silently truncated to 16 bytes.
+    **WARNING:** Keys must be exactly 16 bytes; any other length raises AssertionError.
     **WARNING:** Item IDs (indices) are not stable across sessions.
 
     Attributes:

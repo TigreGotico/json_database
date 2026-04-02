@@ -117,6 +117,6 @@ To reach 80% on all core modules:
 ## Build Verification
 
 ```bash
-pytest test/ --cov=json_database --cov-fail-under=68
-# 350 passed in 1.28s — Coverage 68% (target 80%)
+pytest test/ --cov=json_database --cov-fail-under=80
+# CI gate: 80% (matches --cov-fail-under in unit_tests.yml)
 ```
