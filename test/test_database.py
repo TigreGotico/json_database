@@ -556,3 +556,139 @@ class TestJsonDatabaseErrorHandling:
         assert len(iterated_items) == 3
         for i, item in enumerate(iterated_items):
             assert item["id"] == i
+
+    def test_iter_skips_tombstones(self, temp_db_path):
+        """__iter__ must not yield None tombstone slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"n": 0})
+        db.add_item({"n": 1})
+        db.add_item({"n": 2})
+        db.remove_item(1)
+        result = list(db)
+        assert len(result) == 2
+        assert {"n": 0} in result
+        assert {"n": 2} in result
+        assert None not in result
+
+    def test_setitem(self, temp_db_path):
+        """__setitem__ replaces an existing item by index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        db.add_item({"x": 2})
+        db[0] = {"x": 99}
+        assert db[0]["x"] == 99
+        assert db[1]["x"] == 2
+
+    def test_setitem_invalid(self, temp_db_path):
+        """__setitem__ raises InvalidItemID for out-of-bounds or non-int index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        with pytest.raises(InvalidItemID):
+            db[5] = {"x": 99}
+        with pytest.raises(InvalidItemID):
+            db[-1] = {"x": 99}
+
+    def test_get_item_id_existing(self, temp_db_path):
+        """get_item_id returns correct index for a known item."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice"})
+        db.add_item({"name": "bob"})
+        assert db.get_item_id({"name": "alice"}) == 0
+        assert db.get_item_id({"name": "bob"}) == 1
+        assert db.get_item_id({"name": "unknown"}) == -1
+
+    def test_update_item(self, temp_db_path):
+        """update_item replaces slot contents directly."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"v": 1})
+        db.add_item({"v": 2})
+        db.update_item(0, {"v": 100})
+        assert db[0]["v"] == 100
+        assert db[1]["v"] == 2
+
+    def test_remove_item_out_of_bounds(self, temp_db_path):
+        """remove_item raises InvalidItemID for out-of-range index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        with pytest.raises(InvalidItemID):
+            db.remove_item(5)
+        with pytest.raises(InvalidItemID):
+            db.remove_item(-1)
+
+    def test_search_by_key(self, temp_db_path):
+        """search_by_key returns items containing the given key."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice", "age": 30})
+        db.add_item({"name": "bob"})
+        db.add_item({"age": 25})
+        results = db.search_by_key("name")
+        assert len(results) == 2
+        names = [r["name"] for r in results]
+        assert "alice" in names
+        assert "bob" in names
+
+    def test_search_by_key_fuzzy(self, temp_db_path):
+        """search_by_key with fuzzy=True matches approximate key names."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"username": "alice"})
+        db.add_item({"age": 30})
+        results = db.search_by_key("username", fuzzy=True, thresh=0.5)
+        # fuzzy returns (dict, score) tuples
+        assert any("username" in r[0] for r in results)
+
+    def test_search_by_key_skips_tombstones(self, temp_db_path):
+        """search_by_key does not return results from revoked slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice"})
+        db.add_item({"name": "bob"})
+        db.remove_item(1)
+        results = db.search_by_key("name")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_value(self, temp_db_path):
+        """search_by_value returns items where key == value."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"role": "admin", "name": "alice"})
+        db.add_item({"role": "user", "name": "bob"})
+        db.add_item({"role": "admin", "name": "carol"})
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 2
+        names = [r["name"] for r in results]
+        assert "alice" in names
+        assert "carol" in names
+
+    def test_search_by_value_fuzzy(self, temp_db_path):
+        """search_by_value with fuzzy=True matches approximate values."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"tag": "administrator"})
+        db.add_item({"tag": "guest"})
+        results = db.search_by_value("tag", "admin", fuzzy=True, thresh=0.5)
+        assert len(results) >= 1
+
+    def test_search_by_value_skips_tombstones(self, temp_db_path):
+        """search_by_value ignores revoked slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"role": "admin", "name": "alice"})
+        db.add_item({"role": "admin", "name": "bob"})
+        db.remove_item(1)
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_key_skips_non_dict_items(self, temp_db_path):
+        """search_by_key ignores non-dict items (string/int entries)."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.append("plain_string")         # non-dict — should be skipped
+        db.add_item({"name": "alice"})
+        results = db.search_by_key("name")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_value_skips_non_dict_items(self, temp_db_path):
+        """search_by_value ignores non-dict items."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.append(42)                     # non-dict — should be skipped
+        db.add_item({"role": "admin"})
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 1

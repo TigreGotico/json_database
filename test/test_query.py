@@ -730,3 +730,56 @@ class TestQuery:
         results = query.build()
         # Should execute without error
         assert isinstance(results, list)
+
+    def test_contains_value_fuzzy_dict_branch(self):
+        """contains_value fuzzy=True with a dict value (lines 88-93)."""
+        data = [{"attrs": {"color": "red", "size": "large"}}]
+        query = Query({"db": data})
+        # Build from a list directly
+        q = Query(data[0])
+        q.result = data
+        q.contains_value("attrs", "colour", fuzzy=True, thresh=0.5)
+        assert isinstance(q.result, list)
+
+    def test_contains_value_fuzzy_dict_ignore_case(self):
+        """contains_value fuzzy=True + ignore_case with dict value."""
+        data = [{"meta": {"Color": "Blue"}}]
+        q = Query(data[0])
+        q.result = data
+        q.contains_value("meta", "color", fuzzy=True, thresh=0.5, ignore_case=True)
+        assert isinstance(q.result, list)
+
+    def test_value_contains_str_no_ignore_case(self):
+        """value_contains non-ignore_case str branch (lines 124-126)."""
+        data = [{"desc": "hello world"}, {"desc": "foo bar"}]
+        q = Query(data[0])
+        q.result = data
+        q.value_contains("desc", "hello")
+        assert len(q.result) == 1
+        assert q.result[0]["desc"] == "hello world"
+
+    def test_value_contains_list_no_ignore_case(self):
+        """value_contains non-ignore_case list branch (lines 127-129)."""
+        data = [{"tags": ["a", "b"]}, {"tags": ["c", "d"]}]
+        q = Query(data[0])
+        q.result = data
+        q.value_contains("tags", "a")
+        assert len(q.result) == 1
+        assert "a" in q.result[0]["tags"]
+
+    def test_value_contains_dict_no_ignore_case(self):
+        """value_contains non-ignore_case dict branch (lines 130-132)."""
+        data = [{"meta": {"color": "red"}}, {"meta": {"size": "big"}}]
+        q = Query(data[0])
+        q.result = data
+        q.value_contains("meta", "color")
+        assert len(q.result) == 1
+
+    def test_value_contains_token_non_str_branch(self):
+        """value_contains_token with non-string value falls to list membership (lines 154-155)."""
+        data = [{"tags": ["python", "code"]}, {"tags": ["music"]}]
+        q = Query(data[0])
+        q.result = data
+        q.value_contains_token("tags", "python")
+        assert len(q.result) == 1
+        assert "python" in q.result[0]["tags"]
