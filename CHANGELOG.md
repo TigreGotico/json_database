@@ -8,6 +8,8 @@
 
 - fix: implement tombstone-based stable IDs and fix key resolution with case-insensitivity and improve performance [\#23](https://github.com/TigreGotico/json_database/pull/23) ([JarbasAl](https://github.com/JarbasAl))
 - chore: test coverage improvements + comprehensive docs [\#21](https://github.com/TigreGotico/json_database/pull/21) ([JarbasAl](https://github.com/JarbasAl))
+- chore\(deps\): update actions/setup-python action to v6 [\#20](https://github.com/TigreGotico/json_database/pull/20) ([renovate[bot]](https://github.com/apps/renovate))
+- chore\(deps\): update actions/checkout action to v6 [\#17](https://github.com/TigreGotico/json_database/pull/17) ([renovate[bot]](https://github.com/apps/renovate))
 
 ## [0.10.2a1](https://github.com/TigreGotico/json_database/tree/0.10.2a1) (2025-12-20)
 
