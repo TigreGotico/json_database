@@ -22,9 +22,9 @@ class TestJsonDatabase:
         result = db.add_item({"name": "Widget", "price": 9.99})
 
         assert len(db) == 1
-        # add_item returns len(self) after adding
-        assert result == 1
-        assert db[0] == {"name": "Widget", "price": 9.99}
+        # add_item returns the raw slot index of the added item
+        assert result == 0
+        assert db[result] == {"name": "Widget", "price": 9.99}
 
     def test_add_multiple_items(self, temp_db_path, sample_list_data):
         """Test adding multiple items."""
@@ -40,12 +40,12 @@ class TestJsonDatabase:
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
 
         item = {"id": 1, "name": "Duplicate"}
-        result1 = db.add_item(item)  # Returns len(self) = 1
+        result1 = db.add_item(item)  # Returns slot index 0
         result2 = db.add_item(item)  # Returns get_item_id() = 0
 
-        # add_item returns len() when adding new, get_item_id() when duplicate
-        assert result1 == 1  # New item returns len
-        assert result2 == 0  # Duplicate returns index
+        # add_item returns the slot index in both cases
+        assert result1 == 0  # New item returns slot index
+        assert result2 == 0  # Duplicate returns same slot index
         assert len(db) == 1  # Only one item
 
     def test_add_item_with_duplicates_allowed(self, temp_db_path):
@@ -95,37 +95,38 @@ class TestJsonDatabase:
             db[999] = {"id": 1, "new_data": "value"}
 
     def test_remove_item(self, temp_db_path):
-        """Test removing an item."""
+        """Test removing an item leaves a tombstone and active count drops."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": 1, "name": "First"})
         db.add_item({"id": 2, "name": "Second"})
         db.add_item({"id": 3, "name": "Third"})
 
         assert len(db) == 3
-        db.remove_item(1)  # Remove "Second"
+        db.remove_item(1)  # Revoke "Second" — slot becomes None tombstone
 
-        assert len(db) == 2
-        assert db[0]["id"] == 1
-        assert db[1]["id"] == 3
+        assert len(db) == 2          # active items only
+        assert db[0]["id"] == 1      # First unchanged
+        assert db[2]["id"] == 3      # Third still at index 2 (stable)
+        with pytest.raises(InvalidItemID):
+            _ = db[1]                # tombstone slot raises InvalidItemID
 
-    def test_remove_item_shifts_indices(self, temp_db_path):
-        """Test that removing item shifts remaining indices (ephemeral ID warning)."""
+    def test_remove_item_stable_indices(self, temp_db_path):
+        """Test that removing an item does NOT shift remaining item IDs."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": 10, "name": "A"})
         db.add_item({"id": 20, "name": "B"})
         db.add_item({"id": 30, "name": "C"})
 
-        # Get ID of item with name "C"
         c_id = db.get_item_id({"id": 30, "name": "C"})
         assert c_id == 2
 
         # Remove item "B"
         db.remove_item(1)
 
-        # Now item "C" has shifted down to index 1
+        # C is still at index 2 — IDs are stable
         c_new_id = db.get_item_id({"id": 30, "name": "C"})
-        assert c_new_id == 1
-        assert c_id != c_new_id  # IDs are NOT stable
+        assert c_new_id == 2
+        assert c_new_id == c_id  # IDs ARE stable after tombstone removal
 
     def test_get_item_id(self, temp_db_path, sample_list_data):
         """Test getting item ID (index) for an item."""
@@ -358,14 +359,13 @@ class TestJsonDatabase:
         assert "users" in db2.db  # But users data is loaded from file
         assert db2.db["users"] == [{"id": 1, "name": "Alice"}]
 
-    def test_item_id_ephemerality_warning(self, temp_db_path):
-        """Test documentation of item_id ephemeral nature."""
+    def test_item_id_stable_after_removal(self, temp_db_path):
+        """Test that item IDs are stable after removal (tombstone behaviour)."""
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
         db.add_item({"id": "A"})
         db.add_item({"id": "B"})
         db.add_item({"id": "C"})
 
-        # Store IDs
         id_a = db.get_item_id({"id": "A"})
         id_b = db.get_item_id({"id": "B"})
         id_c = db.get_item_id({"id": "C"})
@@ -374,13 +374,20 @@ class TestJsonDatabase:
         assert id_b == 1
         assert id_c == 2
 
-        # Remove middle item
+        # Remove middle item — slot becomes None, not popped
         db.remove_item(1)
 
-        # IDs shift - B no longer exists, C moved
+        # C is still at index 2 — IDs are stable
         new_id_c = db.get_item_id({"id": "C"})
-        assert new_id_c == 1  # Shifted from 2
-        assert new_id_c != id_c  # NOT stable!
+        assert new_id_c == 2        # unchanged
+        assert new_id_c == id_c     # stable across removal
+
+        # Revoked slot raises InvalidItemID
+        with pytest.raises(InvalidItemID):
+            _ = db[1]
+
+        # Active count reflects live items only
+        assert len(db) == 2
 
 
 class TestJsonDatabaseErrorHandling:
@@ -549,3 +556,168 @@ class TestJsonDatabaseErrorHandling:
         assert len(iterated_items) == 3
         for i, item in enumerate(iterated_items):
             assert item["id"] == i
+
+    def test_iter_skips_tombstones(self, temp_db_path):
+        """__iter__ must not yield None tombstone slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"n": 0})
+        db.add_item({"n": 1})
+        db.add_item({"n": 2})
+        db.remove_item(1)
+        result = list(db)
+        assert len(result) == 2
+        assert {"n": 0} in result
+        assert {"n": 2} in result
+        assert None not in result
+
+    def test_setitem(self, temp_db_path):
+        """__setitem__ replaces an existing item by index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        db.add_item({"x": 2})
+        db[0] = {"x": 99}
+        assert db[0]["x"] == 99
+        assert db[1]["x"] == 2
+
+    def test_setitem_invalid(self, temp_db_path):
+        """__setitem__ raises InvalidItemID for out-of-bounds or non-int index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        with pytest.raises(InvalidItemID):
+            db[5] = {"x": 99}
+        with pytest.raises(InvalidItemID):
+            db[-1] = {"x": 99}
+
+    def test_get_item_id_existing(self, temp_db_path):
+        """get_item_id returns correct index for a known item."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice"})
+        db.add_item({"name": "bob"})
+        assert db.get_item_id({"name": "alice"}) == 0
+        assert db.get_item_id({"name": "bob"}) == 1
+        assert db.get_item_id({"name": "unknown"}) == -1
+
+    def test_update_item_replaces_slot(self, temp_db_path):
+        """update_item replaces slot contents directly."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"v": 1})
+        db.add_item({"v": 2})
+        db.update_item(0, {"v": 100})
+        assert db[0]["v"] == 100
+        assert db[1]["v"] == 2
+
+    def test_remove_item_out_of_bounds(self, temp_db_path):
+        """remove_item raises InvalidItemID for out-of-range index."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"x": 1})
+        with pytest.raises(InvalidItemID):
+            db.remove_item(5)
+        with pytest.raises(InvalidItemID):
+            db.remove_item(-1)
+
+    def test_search_by_key_returns_matching(self, temp_db_path):
+        """search_by_key returns items containing the given key."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice", "age": 30})
+        db.add_item({"name": "bob"})
+        db.add_item({"age": 25})
+        results = db.search_by_key("name")
+        assert len(results) == 2
+        names = [r["name"] for r in results]
+        assert "alice" in names
+        assert "bob" in names
+
+    def test_search_by_key_fuzzy(self, temp_db_path):
+        """search_by_key with fuzzy=True matches approximate key names."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"username": "alice"})
+        db.add_item({"age": 30})
+        results = db.search_by_key("username", fuzzy=True, thresh=0.5)
+        # fuzzy returns (dict, score) tuples
+        assert any("username" in r[0] for r in results)
+
+    def test_search_by_key_skips_tombstones(self, temp_db_path):
+        """search_by_key does not return results from revoked slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"name": "alice"})
+        db.add_item({"name": "bob"})
+        db.remove_item(1)
+        results = db.search_by_key("name")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_value_returns_matching(self, temp_db_path):
+        """search_by_value returns items where key == value."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"role": "admin", "name": "alice"})
+        db.add_item({"role": "user", "name": "bob"})
+        db.add_item({"role": "admin", "name": "carol"})
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 2
+        names = [r["name"] for r in results]
+        assert "alice" in names
+        assert "carol" in names
+
+    def test_search_by_value_fuzzy(self, temp_db_path):
+        """search_by_value with fuzzy=True matches approximate values."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"tag": "administrator"})
+        db.add_item({"tag": "guest"})
+        results = db.search_by_value("tag", "admin", fuzzy=True, thresh=0.5)
+        assert len(results) >= 1
+
+    def test_search_by_value_skips_tombstones(self, temp_db_path):
+        """search_by_value ignores revoked slots."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.add_item({"role": "admin", "name": "alice"})
+        db.add_item({"role": "admin", "name": "bob"})
+        db.remove_item(1)
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_key_skips_non_dict_items(self, temp_db_path):
+        """search_by_key ignores non-dict items (string/int entries)."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.append("plain_string")         # non-dict — should be skipped
+        db.add_item({"name": "alice"})
+        results = db.search_by_key("name")
+        assert len(results) == 1
+        assert results[0]["name"] == "alice"
+
+    def test_search_by_value_skips_non_dict_items(self, temp_db_path):
+        """search_by_value ignores non-dict items."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        db.append(42)                     # non-dict — should be skipped
+        db.add_item({"role": "admin"})
+        results = db.search_by_value("role", "admin")
+        assert len(results) == 1
+
+    def test_active_count_is_int_and_matches_len(self, temp_db_path):
+        """_active_count is an int and always equals len(db)."""
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 0
+
+        db.add_item({"a": 1})
+        db.add_item({"a": 2})
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 2
+
+        db.remove_item(0)
+        assert isinstance(db._active_count, int)
+        assert db._active_count == len(db) == 1
+
+        db.commit()
+        db2 = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        assert isinstance(db2._active_count, int)
+        assert db2._active_count == len(db2) == 1
+
+    def test_len_o1_performance(self, temp_db_path):
+        """len(db) completes in O(1): 1 000 calls on 1 000-item db must finish fast."""
+        import timeit
+        db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
+        for i in range(1000):
+            db.add_item({"i": i}, allow_duplicates=True)
+        elapsed = timeit.timeit(lambda: len(db), number=1000)
+        assert elapsed < 0.01, f"len(db) × 1000 took {elapsed:.4f}s, expected < 0.01s"

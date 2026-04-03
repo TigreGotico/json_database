@@ -91,7 +91,9 @@ When `ignore_case=True`, key and value comparisons are lowercased.
 
 `json_database/search.py:42`
 
-Keeps only records that have `key` set to a truthy value.
+Keeps only records that have `key` present (membership test: `key in record`).
+A key whose value is falsy (e.g. `0`, `""`, `False`, `None`) is still matched
+as long as the key exists in the record.
 
 - `fuzzy=True`: uses `fuzzy_match` to find keys with similarity above `thresh`.
 

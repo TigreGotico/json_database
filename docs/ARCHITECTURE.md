@@ -95,7 +95,11 @@ self.db = {
 Operations on the database manipulate `self.db[self.name]` (a Python list)
 directly. `commit()` calls `self.db.store()` to flush changes to disk.
 
-Item IDs are list indices. Removing item 0 shifts all subsequent IDs down by one.
+Item IDs are stable list indices. `remove_item` writes `None` (a tombstone) into
+the slot rather than popping it, so higher indices are never shifted. Tombstoned
+slots are skipped by `__iter__`, `__len__`, `search_by_key`, `search_by_value`,
+and `__contains__`; a direct `db[item_id]` on a tombstone raises `InvalidItemID`
+(`json_database/__init__.py:252`).
 
 ## Query Builder
 
@@ -138,9 +142,10 @@ The entry point is registered as `hivemind-json-db-plugin` in the
 
 ## Serialisation Notes
 
-`jsonify_recursively` (`json_database/utils.py:321`) converts arbitrary Python
-objects to JSON-compatible structures before storage. It calls `thing.__dict__`
-on objects that are not already dicts, lists, or scalars. This means:
+`jsonify_recursively` (`json_database/utils.py:317`) converts arbitrary Python
+objects to JSON-compatible structures before storage. It uses `hasattr(thing, '__dict__')`
+(not `try/except`) to detect non-dict/list/scalar objects and reads `thing.__dict__`.
+This means:
 
 - Objects stored via `add_item` lose their class identity; they become plain dicts.
 - If you need typed objects on retrieval, implement your own deserialisation layer

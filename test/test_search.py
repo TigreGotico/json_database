@@ -59,6 +59,13 @@ class TestFuzzyMatch:
         score = fuzzy_match("café", "cafe")
         assert 0 <= score <= 1.0
 
+    def test_lru_cache_hit_on_repeated_call(self):
+        """fuzzy_match is cached: a repeated call increments cache hits."""
+        fuzzy_match.cache_clear()
+        fuzzy_match("alpha", "alpha")
+        fuzzy_match("alpha", "alpha")  # second call — must be a cache hit
+        assert fuzzy_match.cache_info().hits >= 1
+
 
 class TestMatchOne:
     """Test match_one best-match selection."""
@@ -885,3 +892,72 @@ class TestMergeDictRecursionEdgeCases:
         result = merge_dict(base, delta, skip_empty=True)
         # Empty value should be skipped, keeping original
         assert result["nested"]["key"] == "value"
+
+
+class TestRecursiveHelpersObjectBranch:
+    """Cover the __dict__ (object) branch in recursive search helpers."""
+
+    class _Obj:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    class _NoDict:
+        __slots__ = ("x",)
+        def __init__(self, x):
+            self.x = x
+
+    def test_get_key_recursively_object_in_list(self):
+        """get_key_recursively follows __dict__ for objects in a list value."""
+        obj = self._Obj(color="red")
+        data = {"items": [obj]}
+        results = get_key_recursively(data, "color")
+        assert obj in results
+
+    def test_get_key_recursively_object_no_dict(self):
+        """get_key_recursively skips objects with no __dict__ (slots)."""
+        obj = self._NoDict(42)
+        data = {"items": [obj]}
+        results = get_key_recursively(data, "x")
+        assert results == []
+
+    def test_get_key_recursively_fuzzy_object_in_list(self):
+        """get_key_recursively_fuzzy follows __dict__ for objects in a list."""
+        obj = self._Obj(username="alice")
+        data = {"items": [obj]}
+        results = get_key_recursively_fuzzy(data, "username", thresh=0.9)
+        assert any(r[0] is obj for r in results)
+
+    def test_get_key_recursively_fuzzy_object_no_dict(self):
+        """get_key_recursively_fuzzy skips slot-only objects."""
+        obj = self._NoDict(42)
+        data = {"items": [obj]}
+        results = get_key_recursively_fuzzy(data, "x", thresh=0.5)
+        assert results == []
+
+    def test_get_value_recursively_object_in_list(self):
+        """get_value_recursively follows __dict__ for objects in a list."""
+        obj = self._Obj(role="admin")
+        data = {"items": [obj]}
+        results = get_value_recursively(data, "role", "admin")
+        assert obj in results
+
+    def test_get_value_recursively_object_no_dict(self):
+        """get_value_recursively skips slot-only objects."""
+        obj = self._NoDict(42)
+        data = {"items": [obj]}
+        results = get_value_recursively(data, "x", 42)
+        assert results == []
+
+    def test_get_value_recursively_fuzzy_object_in_list(self):
+        """get_value_recursively_fuzzy follows __dict__ for objects in a list."""
+        obj = self._Obj(tag="administrator")
+        data = {"items": [obj]}
+        results = get_value_recursively_fuzzy(data, "tag", "admin", thresh=0.5)
+        assert any(r[0] is obj for r in results)
+
+    def test_get_value_recursively_fuzzy_object_no_dict(self):
+        """get_value_recursively_fuzzy skips slot-only objects."""
+        obj = self._NoDict(42)
+        data = {"items": [obj]}
+        results = get_value_recursively_fuzzy(data, "x", "42", thresh=0.5)
+        assert results == []
