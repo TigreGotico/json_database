@@ -22,9 +22,9 @@ class TestJsonDatabase:
         result = db.add_item({"name": "Widget", "price": 9.99})
 
         assert len(db) == 1
-        # add_item returns len(self) after adding
-        assert result == 1
-        assert db[0] == {"name": "Widget", "price": 9.99}
+        # add_item returns the raw slot index of the added item
+        assert result == 0
+        assert db[result] == {"name": "Widget", "price": 9.99}
 
     def test_add_multiple_items(self, temp_db_path, sample_list_data):
         """Test adding multiple items."""
@@ -40,12 +40,12 @@ class TestJsonDatabase:
         db = JsonDatabase("items", path=temp_db_path, disable_lock=True)
 
         item = {"id": 1, "name": "Duplicate"}
-        result1 = db.add_item(item)  # Returns len(self) = 1
+        result1 = db.add_item(item)  # Returns slot index 0
         result2 = db.add_item(item)  # Returns get_item_id() = 0
 
-        # add_item returns len() when adding new, get_item_id() when duplicate
-        assert result1 == 1  # New item returns len
-        assert result2 == 0  # Duplicate returns index
+        # add_item returns the slot index in both cases
+        assert result1 == 0  # New item returns slot index
+        assert result2 == 0  # Duplicate returns same slot index
         assert len(db) == 1  # Only one item
 
     def test_add_item_with_duplicates_allowed(self, temp_db_path):

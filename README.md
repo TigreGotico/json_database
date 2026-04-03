@@ -67,10 +67,11 @@ results = Query(db).equal("role", "user").build()
 | `JsonDatabaseXDG(name)` | `~/.local/share/json_database/{name}.jsondb` | persistent records |
 | `EncryptedJsonStorage(key, path)` | user-specified | sensitive data at rest |
 
-> **Note:** Item IDs in `JsonDatabase` are stable list indices. Removing an
-> item tombstones its slot (`None`) rather than shifting subsequent IDs, so an
-> ID obtained from `add_item` or `get_item_id` remains valid for the lifetime
-> of the database file. Tombstoned slots are invisible to iteration, search,
+> **Note:** Item IDs in `JsonDatabase` are stable list indices. `add_item` and
+> `append` return the zero-based slot index of the new item. Removing an item
+> tombstones its slot rather than shifting subsequent IDs, so an ID obtained
+> from `add_item` or `get_item_id` remains valid for the lifetime of the
+> database file. Tombstoned slots are invisible to iteration, search,
 > `__contains__`, and `__len__`; accessing one via `db[item_id]` raises
 > `InvalidItemID`.
 

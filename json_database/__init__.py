@@ -306,16 +306,16 @@ class JsonDatabase(dict):
         value = jsonify_recursively(value)
         self.db[self.name].append(value)
         self._active_count += 1
-        return self._active_count
+        return len(self.db[self.name]) - 1
 
     def add_item(self, value, allow_duplicates=False):
         """ add an item to database
          if allow_duplicates is True, item is added unconditionally,
          else only if no exact match is present
+         Returns the item_id (raw slot index) of the added or existing item.
          """
         if allow_duplicates or value not in self:
-            self.append(value)
-            return len(self)
+            return self.append(value)
         return self.get_item_id(value)
 
     def match_item(self, value, match_strategy=None):
