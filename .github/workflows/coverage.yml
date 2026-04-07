@@ -7,7 +7,7 @@ on:
 
 jobs:
   coverage:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@e37a97650feada694abb6420a84bbd23a71d6bb1
+    uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@fa39846b074ac7a856c8af5f8c0dec12b1fff1aa
     secrets: inherit
     with:
       python_version: '3.11'

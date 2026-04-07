@@ -6,7 +6,7 @@ on:
 
 jobs:
   build_tests:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@e37a97650feada694abb6420a84bbd23a71d6bb1
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@fa39846b074ac7a856c8af5f8c0dec12b1fff1aa
     secrets: inherit
     with:
       package_name: 'json_database'
