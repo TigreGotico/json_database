@@ -56,7 +56,7 @@ jobs:
         run: |
           pytest --cov=json_database --cov-fail-under=80 --cov-report=term-missing --cov-report=xml test
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         if: matrix.python-version == '3.12'
         with:
           files: ./coverage.xml
