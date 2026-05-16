@@ -15,3 +15,4 @@ jobs:
       test_path: 'test/'
       install_extras: 'test'
       min_coverage: 80
+      pr_comment: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}

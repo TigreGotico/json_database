@@ -3,7 +3,10 @@ from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
 from typing import Union, Iterable, List, Optional
 from json_database import JsonStorageXDG, EncryptedJsonStorageXDG
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+
+
+CLIENT_SUPPORTS_METADATA = any(field.name == "metadata" for field in fields(Client))
 
 
 @dataclass
@@ -39,7 +42,12 @@ class JsonDB(AbstractDB):
         Returns:
             True if the addition was successful, False otherwise.
         """
-        self._db[client.client_id] = client.__dict__
+        client_data = dict(client.__dict__)
+        if not CLIENT_SUPPORTS_METADATA:
+            client_data.pop("metadata", None)
+        elif not isinstance(client_data.get("metadata"), dict):
+            client_data["metadata"] = {}
+        self._db[client.client_id] = client_data
         return True
 
     def search_by_value(self, key: str, val: Union[str, bool, int, float]) -> List[Client]:
@@ -57,12 +65,12 @@ class JsonDB(AbstractDB):
         if key == "client_id":
             v = self._db.get(val)
             if v:
-                res.append(cast2client(v))
+                res.append(self._cast_client(v))
         else:
             for client in self._db.values():
                 v = client.get(key)
                 if v == val:
-                    res.append(cast2client(client))
+                    res.append(self._cast_client(client))
         return res
 
     def __len__(self) -> int:
@@ -82,7 +90,7 @@ class JsonDB(AbstractDB):
             An iterator over the clients in the database.
         """
         for item in self._db.values():
-            yield Client.deserialize(item)
+            yield self._cast_client(item)
 
     def commit(self) -> bool:
         """
@@ -97,3 +105,14 @@ class JsonDB(AbstractDB):
         except Exception as e:
             LOG.error(f"Failed to save {self._db.path} - {e}")
             return False
+
+    @staticmethod
+    def _cast_client(client_data) -> Client:
+        if not CLIENT_SUPPORTS_METADATA and isinstance(client_data, dict):
+            client_data = dict(client_data)
+            client_data.pop("metadata", None)
+        elif CLIENT_SUPPORTS_METADATA and isinstance(client_data, dict):
+            if not isinstance(client_data.get("metadata"), dict):
+                client_data = dict(client_data)
+                client_data["metadata"] = {}
+        return cast2client(client_data)
