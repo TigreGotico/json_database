@@ -55,6 +55,31 @@ store(path)
 File locking wraps both `load_local` and `store` via `ComboLock` (or
 `DummyLock`). The lock file lives in `/tmp/{basename}.lock`.
 
+### Aliasing semantics
+
+`JsonStorage` is a thin `dict` subclass with no `__setitem__` override —
+assigned values are stored *by reference*, matching plain `dict` semantics.
+Mutating the original object after assignment is reflected in the JSON
+written on the next `store()`:
+
+```python
+d = {"v": "original"}
+storage["x"] = d
+d["v"] = "mutated"
+storage.store()  # writes {"v": "mutated"}
+```
+
+This is intentional. It supports the common pattern of building a nested
+structure in place (`storage["x"] = {}; storage["x"]["k"] = v`) and avoids
+hidden copy overhead. Callers that want isolation between in-memory state
+and on-disk state must take their own snapshot before assignment (`dict(d)`,
+`copy.deepcopy(d)`, etc.).
+
+`JsonDatabase` chose the opposite default — see [Data Flow: JsonDatabase](#data-flow-jsondatabase)
+below. The HiveMind plugin (`hpm.py`) sits on top of `JsonStorage` and deep-copies
+the caller's `Client.__dict__` explicitly for the same reason — see
+[HiveMind Plugin](#hivemind-plugin).
+
 ## Data Flow: EncryptedJsonStorage
 
 ```
@@ -100,6 +125,16 @@ the slot rather than popping it, so higher indices are never shifted. Tombstoned
 slots are skipped by `__iter__`, `__len__`, `search_by_key`, `search_by_value`,
 and `__contains__`; a direct `db[item_id]` on a tombstone raises `InvalidItemID`
 (`json_database/__init__.py:252`).
+
+### Aliasing semantics
+
+Unlike `JsonStorage`, `JsonDatabase` isolates stored records from caller
+state. Every mutation entry point (`add_item`, `append`, `merge_item`,
+`replace_item`, `update_item`, `__setitem__` via `update_item`) routes input
+through `jsonify_recursively` (`utils.py:314`), which rebuilds every nested
+`dict` and `list`. Mutating the caller-side object after insertion has no
+effect on the stored record. This is the opposite default to `JsonStorage` —
+see [Aliasing semantics](#aliasing-semantics) under `JsonStorage` above.
 
 ## Query Builder
 
