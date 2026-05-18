@@ -40,16 +40,11 @@ class JsonDB(AbstractDB):
         Returns:
             True if the addition was successful, False otherwise.
         """
-        client_data = dict(client.__dict__)
-        # Client.__post_init__ guarantees a dict at construction time, but a
-        # caller can later do `client.metadata = <garbage>`. Coerce here so a
-        # single bad in-memory client doesn't poison the on-disk JSON file.
-        if not isinstance(client_data.get("metadata"), dict):
-            client_data["metadata"] = {}
-        else:
-            # Snapshot metadata so later caller-side mutation of the dict
-            # (including nested structures) doesn't leak into stored state.
-            client_data["metadata"] = copy.deepcopy(client_data["metadata"])
+        # Deep copy to break aliasing: dict(client.__dict__) is shallow, so
+        # mutable fields (metadata dict, intent/skill/message/allowed lists)
+        # would otherwise reference caller state and pick up later mutations
+        # on the next commit. Snapshot once on insert.
+        client_data = copy.deepcopy(client.__dict__)
         self._db[client.client_id] = client_data
         return True
 

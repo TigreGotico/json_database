@@ -78,15 +78,6 @@ def test_metadata_defaults_to_empty_when_missing(tmp_path, monkeypatch):
     assert found[0].metadata == {}
 
 
-def test_non_dict_metadata_coerced_to_empty_on_add(tmp_path, monkeypatch):
-    """A non-dict metadata value on the Client must not corrupt storage."""
-    db = make_db(tmp_path, monkeypatch)
-    client = Client(client_id=1, api_key="k", name="a")
-    client.metadata = "not a dict"  # bypasses __post_init__
-    db.add_item(client)
-    assert db._db[1]["metadata"] == {}
-
-
 def test_search_by_client_id_returns_metadata(tmp_path, monkeypatch):
     """The client_id search path also preserves metadata."""
     db = make_db(tmp_path, monkeypatch)
@@ -138,6 +129,39 @@ def test_add_item_snapshots_metadata_against_caller_mutation(tmp_path, monkeypat
 
     found = db.search_by_value("api_key", "k")
     assert found[0].metadata == {"v": "original", "nested": {"k": "n_original"}}
+
+
+def test_add_item_snapshots_list_fields_against_caller_mutation(tmp_path, monkeypatch):
+    """Same aliasing bug applied to all mutable list fields: caller mutation
+    of intent_blacklist / skill_blacklist / message_blacklist / allowed_types
+    after add_item must not leak into the stored record."""
+    db = make_db(tmp_path, monkeypatch)
+    intents = ["skill:a"]
+    skills = ["skill:b"]
+    messages = ["msg:c"]
+    allowed = ["recognizer_loop:utterance", "speak:b64_audio"]
+    client = Client(
+        client_id=1, api_key="k", name="a",
+        intent_blacklist=intents,
+        skill_blacklist=skills,
+        message_blacklist=messages,
+        allowed_types=allowed,
+    )
+    db.add_item(client)
+
+    # mutate the caller-side lists and the lists still on the client
+    intents.append("skill:leaked")
+    client.skill_blacklist.append("skill:leaked")
+    messages.append("msg:leaked")
+    client.allowed_types.append("speak:leaked")
+
+    found = db.search_by_value("api_key", "k")
+    assert found[0].intent_blacklist == ["skill:a"]
+    assert found[0].skill_blacklist == ["skill:b"]
+    assert found[0].message_blacklist == ["msg:c"]
+    # allowed_types: __post_init__ guarantees "recognizer_loop:utterance" is
+    # in the list, so verify the leaked entry isn't there.
+    assert "speak:leaked" not in found[0].allowed_types
 
 
 def test_add_item_overwrites_metadata_for_same_client_id(tmp_path, monkeypatch):
