@@ -1,3 +1,4 @@
+import copy
 from hivemind_plugin_manager.database import Client, AbstractDB, cast2client
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
@@ -45,6 +46,10 @@ class JsonDB(AbstractDB):
         # single bad in-memory client doesn't poison the on-disk JSON file.
         if not isinstance(client_data.get("metadata"), dict):
             client_data["metadata"] = {}
+        else:
+            # Snapshot metadata so later caller-side mutation of the dict
+            # (including nested structures) doesn't leak into stored state.
+            client_data["metadata"] = copy.deepcopy(client_data["metadata"])
         self._db[client.client_id] = client_data
         return True
 

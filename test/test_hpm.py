@@ -124,6 +124,22 @@ def test_metadata_survives_commit_and_reload(tmp_path, monkeypatch):
     assert found[0].metadata == {"owner": "owner-1"}
 
 
+def test_add_item_snapshots_metadata_against_caller_mutation(tmp_path, monkeypatch):
+    """Caller mutations to client.metadata after add_item must not leak into
+    the stored record — including mutations of nested dicts."""
+    db = make_db(tmp_path, monkeypatch)
+    meta = {"v": "original", "nested": {"k": "n_original"}}
+    client = make_client(client_id=1, api_key="k", name="a", metadata=meta)
+    db.add_item(client)
+
+    meta["v"] = "mutated"
+    meta["nested"]["k"] = "n_mutated"
+    client.metadata["added"] = "later"
+
+    found = db.search_by_value("api_key", "k")
+    assert found[0].metadata == {"v": "original", "nested": {"k": "n_original"}}
+
+
 def test_add_item_overwrites_metadata_for_same_client_id(tmp_path, monkeypatch):
     """Re-adding a client with the same client_id replaces stored metadata."""
     db = make_db(tmp_path, monkeypatch)
