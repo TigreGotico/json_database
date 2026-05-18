@@ -40,6 +40,9 @@ class JsonDB(AbstractDB):
             True if the addition was successful, False otherwise.
         """
         client_data = dict(client.__dict__)
+        # Client.__post_init__ guarantees a dict at construction time, but a
+        # caller can later do `client.metadata = <garbage>`. Coerce here so a
+        # single bad in-memory client doesn't poison the on-disk JSON file.
         if not isinstance(client_data.get("metadata"), dict):
             client_data["metadata"] = {}
         self._db[client.client_id] = client_data
