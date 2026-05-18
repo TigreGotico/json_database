@@ -11,6 +11,6 @@ jobs:
     secrets: inherit
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
-      install_extras: '.[test]'
+      install_extras: 'test'
       test_path: 'test'
       pr_comment: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
