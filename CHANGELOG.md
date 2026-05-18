@@ -6,6 +6,7 @@
 
 **Merged pull requests:**
 
+- fix\(hpm\): break aliasing in JsonDB.add\_item + tests [\#26](https://github.com/TigreGotico/json_database/pull/26) ([JarbasAl](https://github.com/JarbasAl))
 - fix: implement tombstone-based stable IDs and fix key resolution with case-insensitivity and improve performance [\#23](https://github.com/TigreGotico/json_database/pull/23) ([JarbasAl](https://github.com/JarbasAl))
 - chore: test coverage improvements + comprehensive docs [\#21](https://github.com/TigreGotico/json_database/pull/21) ([JarbasAl](https://github.com/JarbasAl))
 - chore\(deps\): update actions/setup-python action to v6 [\#20](https://github.com/TigreGotico/json_database/pull/20) ([renovate[bot]](https://github.com/apps/renovate))
