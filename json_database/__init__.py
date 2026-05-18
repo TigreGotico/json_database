@@ -50,6 +50,26 @@ class JsonStorage(dict):
         # Context manager auto-saves on exit
         with JsonStorage("config.json") as storage:
             storage["setting"] = 123
+
+    Aliasing semantics:
+        ``JsonStorage`` is a thin ``dict`` subclass — assignments via
+        ``storage[key] = value`` keep a reference to ``value``, not a copy.
+        Mutating the original object after assignment will be reflected in
+        the JSON written on the next ``store()`` call. This is by design
+        (matches plain ``dict`` semantics and supports the common pattern
+        of building a nested structure in place), but it means callers
+        passing in shared mutable objects must take their own snapshot if
+        they want isolation::
+
+            d = {"v": "original"}
+            storage["x"] = d
+            d["v"] = "mutated"
+            storage.store()  # writes {"v": "mutated"}, not {"v": "original"}
+
+        If you need automatic copy-on-assign semantics (caller state and
+        storage state independent), use ``JsonDatabase`` instead — its
+        mutation methods route inputs through ``jsonify_recursively`` which
+        rebuilds every container.
     """
 
     def __init__(self, path, disable_lock=False):
@@ -217,6 +237,16 @@ class JsonDatabase(dict):
         results = query.build()
 
         db.commit()  # Save to disk
+
+    Aliasing semantics:
+        Unlike ``JsonStorage``, ``JsonDatabase`` mutation methods
+        (``add_item``, ``append``, ``merge_item``, ``replace_item``,
+        ``update_item``, ``__setitem__``) route input through
+        ``jsonify_recursively`` (`utils.py:314`), which rebuilds every
+        nested ``dict`` and ``list``. Records stored in the database are
+        therefore independent of the caller-side objects passed in —
+        mutating the original after insertion has no effect on the stored
+        record.
     """
 
     def __init__(self,

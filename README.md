@@ -92,8 +92,14 @@ results = Query(db).equal("role", "user").build()
 ## HiveMind Integration
 
 This project includes a native [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager)
-integration, providing JSON-backed storage for HiveMind client credentials and
-permissions via the `hivemind-json-db-plugin` entry point.
+integration (`>=0.5.0`), providing JSON-backed storage for HiveMind client
+credentials and permissions via the `hivemind-json-db-plugin` entry point.
+
+The storage layer is schema-less: the entire `Client.__dict__` is persisted
+per record, so new `Client` fields (e.g. the `metadata` dict added in
+plugin-manager 0.5.0) round-trip transparently without changes here. See
+[Architecture → HiveMind Plugin](docs/ARCHITECTURE.md#hivemind-plugin) for
+the storage shape and the deep-copy aliasing contract.
 
 ## License
 

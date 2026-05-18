@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 crypto = ["pycryptodomex"]
+hpm = ["hivemind-plugin-manager>=0.5.0,<1.0.0"]
 test = [
     "coveralls>=1.8.2",
     "flake8>=3.7.9",
@@ -23,6 +24,7 @@ test = [
     "pytest-cov>=2.8.1",
     "cov-core>=1.15.0",
     "pycryptodomex",
+    "hivemind-plugin-manager>=0.5.0,<1.0.0",
 ]
 
 [project.urls]

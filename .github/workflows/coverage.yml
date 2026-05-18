@@ -7,11 +7,12 @@ on:
 
 jobs:
   coverage:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@e37a97650feada694abb6420a84bbd23a71d6bb1
+    uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@dev
     secrets: inherit
     with:
       python_version: '3.11'
       coverage_source: 'json_database'
       test_path: 'test/'
-      install_extras: 'test'
+      install_extras: '.[test]'
       min_coverage: 80
+      pr_comment: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}

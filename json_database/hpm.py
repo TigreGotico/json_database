@@ -1,3 +1,4 @@
+import copy
 from hivemind_plugin_manager.database import Client, AbstractDB, cast2client
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
@@ -20,8 +21,8 @@ class JsonDB(AbstractDB):
                                                subfolder=self.subfolder,
                                                xdg_folder=xdg_data_home())
         else:
-            self._db = JsonStorageXDG(self.name, 
-                                      subfolder=self.subfolder, 
+            self._db = JsonStorageXDG(self.name,
+                                      subfolder=self.subfolder,
                                       xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
@@ -39,7 +40,12 @@ class JsonDB(AbstractDB):
         Returns:
             True if the addition was successful, False otherwise.
         """
-        self._db[client.client_id] = client.__dict__
+        # Deep copy to break aliasing: dict(client.__dict__) is shallow, so
+        # mutable fields (metadata dict, intent/skill/message/allowed lists)
+        # would otherwise reference caller state and pick up later mutations
+        # on the next commit. Snapshot once on insert.
+        client_data = copy.deepcopy(client.__dict__)
+        self._db[client.client_id] = client_data
         return True
 
     def search_by_value(self, key: str, val: Union[str, bool, int, float]) -> List[Client]:
@@ -82,7 +88,7 @@ class JsonDB(AbstractDB):
             An iterator over the clients in the database.
         """
         for item in self._db.values():
-            yield Client.deserialize(item)
+            yield cast2client(item)
 
     def commit(self) -> bool:
         """

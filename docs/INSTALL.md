@@ -48,11 +48,12 @@ pycryptodomex`.
 The `json_database.hpm` module (HiveMind plugin) additionally requires:
 
 ```bash
-pip install hivemind-plugin-manager ovos-utils
+pip install "hivemind-plugin-manager>=0.5.0" ovos-utils
 ```
 
 These are not installed by default and are only needed if you use the
-`hivemind-json-db-plugin` entry point.
+`hivemind-json-db-plugin` entry point. `>=0.5.0` ships the `Client.metadata`
+field that the plugin stores transparently — see [Architecture](ARCHITECTURE.md#hivemind-plugin).
 
 ## Verifying the Install
 
