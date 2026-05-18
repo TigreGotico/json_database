@@ -104,8 +104,12 @@ test: add edge case for item_id shift after remove_item
 
 ## Known Uncovered Code Paths
 
-- `json_database/hpm.py` — HiveMind plugin; requires `hivemind-plugin-manager`
-  and `ovos-utils` which are not installed in the test environment.
 - `merge_item` and `replace_item` error paths in `JsonDatabase` — `match_strategy`
   parameter is accepted but not yet implemented.
 - `DummyLock` detailed locking edge cases.
+
+`json_database/hpm.py` (HiveMind plugin) is covered by `test/test_hpm.py`,
+which runs against `hivemind-plugin-manager>=0.5.0` declared in the `test`
+extra. Tests cover round-trip via `add_item` / `search_by_value` / `__iter__`,
+on-disk commit + reload, and the deep-copy aliasing fix for `metadata` and
+the list fields.
