@@ -7,10 +7,10 @@ on:
 
 jobs:
   build:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@e37a97650feada694abb6420a84bbd23a71d6bb1
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
     secrets: inherit
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
-      install_extras: 'test'
+      install_extras: '.[test]'
       test_path: 'test'
       pr_comment: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
