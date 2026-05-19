@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0a1](https://github.com/TigreGotico/json_database/tree/1.0.0a1) (2026-05-19)
+
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.4a2...1.0.0a1)
+
+**Breaking changes:**
+
+- refactor!: extract json\_database.hpm into hivemind-json-db-plugin [\#27](https://github.com/TigreGotico/json_database/pull/27) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.4a2](https://github.com/TigreGotico/json_database/tree/0.10.4a2) (2026-05-19)
 
 [Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.2a1...0.10.4a2)
