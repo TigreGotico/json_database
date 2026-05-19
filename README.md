@@ -55,7 +55,6 @@ results = Query(db).equal("role", "user").build()
 - File locking via `combo_lock` for safe concurrent access
 - Supports commented JSON files (`//` and `#` line comments)
 - Arbitrary Python objects stored via automatic `jsonify_recursively` conversion
-- HiveMind plugin (`hivemind-json-db-plugin`) for voice assistant integration
 
 ## Configuration / Key Options
 
@@ -91,15 +90,17 @@ results = Query(db).equal("role", "user").build()
 
 ## HiveMind Integration
 
-This project includes a native [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager)
-integration (`>=0.5.0`), providing JSON-backed storage for HiveMind client
-credentials and permissions via the `hivemind-json-db-plugin` entry point.
+The HiveMind database-plugin adapter that used to ship as
+`json_database.hpm:JsonDB` has been extracted into its own package,
+[`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin),
+so it can release on a HiveMind-aligned cadence and `json_database` doesn't pull
+in `hivemind-plugin-manager` for users who don't need it.
 
-The storage layer is schema-less: the entire `Client.__dict__` is persisted
-per record, so new `Client` fields (e.g. the `metadata` dict added in
-plugin-manager 0.5.0) round-trip transparently without changes here. See
-[Architecture → HiveMind Plugin](docs/ARCHITECTURE.md#hivemind-plugin) for
-the storage shape and the deep-copy aliasing contract.
+For the 1.x line, `pip install json_database[hpm]` continues to work — it now
+transitively installs `hivemind-json-db-plugin` so the `hivemind.database`
+entry point remains available without code changes. **The `[hpm]` extra will
+be removed in 2.0.0;** users should migrate to
+`pip install hivemind-json-db-plugin` directly.
 
 ## License
 
