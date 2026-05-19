@@ -108,8 +108,7 @@ test: add edge case for item_id shift after remove_item
   parameter is accepted but not yet implemented.
 - `DummyLock` detailed locking edge cases.
 
-`json_database/hpm.py` (HiveMind plugin) is covered by `test/test_hpm.py`,
-which runs against `hivemind-plugin-manager>=0.5.0` declared in the `test`
-extra. Tests cover round-trip via `add_item` / `search_by_value` / `__iter__`,
-on-disk commit + reload, and the deep-copy aliasing fix for `metadata` and
-the list fields.
+The HiveMind plugin adapter that used to live here as `json_database/hpm.py`
+was extracted into
+[`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin);
+its tests now live in that repo.

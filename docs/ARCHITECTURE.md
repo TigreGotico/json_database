@@ -36,7 +36,6 @@ Query                               (stateful filter builder, not a dict)
 | `json_database/utils.py` | `merge_dict`, fuzzy matching, recursive search helpers, `DummyLock` |
 | `json_database/xdg_utils.py` | XDG path resolution (adapted from Scott Stevenson's xdg library) |
 | `json_database/exceptions.py` | Custom exception classes |
-| `json_database/hpm.py` | HiveMind plugin adapter (`JsonDB`) |
 | `json_database/version.py` | Version constants |
 
 ## Data Flow: JsonStorage
@@ -76,9 +75,7 @@ and on-disk state must take their own snapshot before assignment (`dict(d)`,
 `copy.deepcopy(d)`, etc.).
 
 `JsonDatabase` chose the opposite default — see [Data Flow: JsonDatabase](#data-flow-jsondatabase)
-below. The HiveMind plugin (`hpm.py`) sits on top of `JsonStorage` and deep-copies
-the caller's `Client.__dict__` explicitly for the same reason — see
-[HiveMind Plugin](#hivemind-plugin).
+below.
 
 ## Data Flow: EncryptedJsonStorage
 
@@ -168,36 +165,13 @@ the system temp directory.
 
 ## HiveMind Plugin
 
-`json_database/hpm.py` implements `AbstractDB` from `hivemind-plugin-manager`
-(>=0.5.0). It wraps either `JsonStorageXDG` (plain) or `EncryptedJsonStorageXDG`
-(when a password is provided) as a key-value store for HiveMind client
-credentials.
-
-The entry point is registered as `hivemind-json-db-plugin` in the
-`hivemind.database` group (`setup.py:59`).
-
-### Storage shape and schema-less round-trip
-
-`JsonDB.add_item` stores `copy.deepcopy(client.__dict__)` keyed by `client_id`
-(`hpm.py:42`). The deep copy is intentional: a shallow `dict(client.__dict__)`
-would alias every mutable field on the `Client` (the `metadata` dict and the
-four list fields `intent_blacklist` / `skill_blacklist` / `message_blacklist` /
-`allowed_types`), so caller-side mutations between `add_item` and `commit` would
-silently leak into the on-disk JSON.
-
-The plugin is schema-less — `Client.__dict__` is whatever the installed
-`hivemind-plugin-manager` says it is. When upstream adds a new field (the
-`metadata` dict in 0.5.0), the JSON file picks it up transparently with no
-code change here.
-
-### Reads
-
-Both `search_by_value` and `__iter__` go through `cast2client(...)`
-(`hpm.py:60–88`) rather than calling `Client.deserialize` directly. `cast2client`
-is the more permissive of the two — it passes through `None`/existing `Client`
-instances/lists and only falls through to `Client.deserialize` for strings and
-dicts. Using it on both read paths keeps the iteration tolerant of unexpected
-record shapes (e.g. a previously-cast `Client` somehow ending up in storage).
+The HiveMind database-plugin adapter that used to live here as
+`json_database/hpm.py` was extracted into its own package,
+[`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin),
+so it can release on a HiveMind-aligned cadence and `json_database` doesn't pull
+`hivemind-plugin-manager` in for every consumer. See that repo's documentation
+for the plugin's storage shape, schema-migration contract, and read/write
+semantics.
 
 ## Serialisation Notes
 

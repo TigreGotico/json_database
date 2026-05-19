@@ -16,7 +16,6 @@ dependencies = [
 
 [project.optional-dependencies]
 crypto = ["pycryptodomex"]
-hpm = ["hivemind-plugin-manager>=0.5.0,<1.0.0"]
 test = [
     "coveralls>=1.8.2",
     "flake8>=3.7.9",
@@ -24,14 +23,16 @@ test = [
     "pytest-cov>=2.8.1",
     "cov-core>=1.15.0",
     "pycryptodomex",
-    "hivemind-plugin-manager>=0.5.0,<1.0.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/TigreGotico/json_database"
 
-[project.entry-points."hivemind.database"]
-"hivemind-json-db-plugin" = "json_database.hpm:JsonDB"
+# NOTE: the HiveMind database-plugin adapter that used to live here as
+# ``json_database.hpm:JsonDB`` was extracted into its own package:
+# https://github.com/JarbasHiveMind/hivemind-json-db-plugin
+# Install ``hivemind-json-db-plugin`` if you need the
+# ``hivemind.database`` entry-point binding.
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -43,17 +43,13 @@ If neither is installed, constructing an `EncryptedJsonStorage` succeeds but
 calling `store()` or `load_local()` raises `ImportError: run pip install
 pycryptodomex`.
 
-## HiveMind Plugin Dependency
+## HiveMind Plugin
 
-The `json_database.hpm` module (HiveMind plugin) additionally requires:
-
-```bash
-pip install "hivemind-plugin-manager>=0.5.0" ovos-utils
-```
-
-These are not installed by default and are only needed if you use the
-`hivemind-json-db-plugin` entry point. `>=0.5.0` ships the `Client.metadata`
-field that the plugin stores transparently — see [Architecture](ARCHITECTURE.md#hivemind-plugin).
+The HiveMind plugin previously bundled here as `json_database.hpm` was
+extracted into its own package,
+[`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin).
+Install that package if you need the `hivemind.database` entry-point binding —
+it pulls in `hivemind-plugin-manager` as a transitive dependency.
 
 ## Verifying the Install
 
