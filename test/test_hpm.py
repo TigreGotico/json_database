@@ -135,18 +135,16 @@ def test_add_item_snapshots_metadata_against_caller_mutation(tmp_path, monkeypat
 
 def test_add_item_snapshots_list_fields_against_caller_mutation(tmp_path, monkeypatch):
     """Same aliasing bug applied to all mutable list fields: caller mutation
-    of intent_blacklist / skill_blacklist / message_blacklist / allowed_types
-    after add_item must not leak into the stored record."""
+    of intent_blacklist / skill_blacklist / allowed_types after add_item
+    must not leak into the stored record."""
     db = make_db(tmp_path, monkeypatch)
     intents = ["skill:a"]
     skills = ["skill:b"]
-    messages = ["msg:c"]
     allowed = ["recognizer_loop:utterance", "speak:b64_audio"]
     client = Client(
         client_id=1, api_key="k", name="a",
         intent_blacklist=intents,
         skill_blacklist=skills,
-        message_blacklist=messages,
         allowed_types=allowed,
     )
     db.add_item(client)
@@ -154,15 +152,12 @@ def test_add_item_snapshots_list_fields_against_caller_mutation(tmp_path, monkey
     # mutate the caller-side lists and the lists still on the client
     intents.append("skill:leaked")
     client.skill_blacklist.append("skill:leaked")
-    messages.append("msg:leaked")
     client.allowed_types.append("speak:leaked")
 
     found = db.search_by_value("api_key", "k")
     # Skill/intent surface via property shims (read from metadata).
-    # message_blacklist has no read-side shim — fetch via metadata.
     assert found[0].intent_blacklist == ["skill:a"]
     assert found[0].skill_blacklist == ["skill:b"]
-    assert found[0].metadata.get("message_blacklist") == ["msg:c"]
     # allowed_types: __post_init__ guarantees "recognizer_loop:utterance" is
     # in the list, so verify the leaked entry isn't there.
     assert "speak:leaked" not in found[0].allowed_types
@@ -217,7 +212,25 @@ def test_migrate_folds_legacy_keys_into_metadata(tmp_path, monkeypatch):
     assert record["metadata"]["owner"] == "u"
     assert record["metadata"]["intent_blacklist"] == ["i:1"]
     assert record["metadata"]["skill_blacklist"] == ["s:1"]
-    assert record["metadata"]["message_blacklist"] == ["m:1"]
+    # message_blacklist is purged outright, NOT folded into metadata.
+    assert "message_blacklist" not in record["metadata"]
+
+
+def test_migrate_purges_residual_metadata_message_blacklist(tmp_path, monkeypatch):
+    """A row already half-migrated (legacy top-level keys gone, but
+    metadata still carrying message_blacklist from an older plugin
+    version) must have the metadata key stripped on re-migration."""
+    db = make_db(tmp_path, monkeypatch)
+    db._db[7] = {
+        "client_id": 7, "api_key": "k", "name": "alpha", "allowed_types": [],
+        "metadata": {"owner": "u", "message_blacklist": ["m:1"]},
+    }
+    db._db.store()
+
+    db.migrate(from_version=1)
+
+    assert "message_blacklist" not in db._db[7]["metadata"]
+    assert db._db[7]["metadata"]["owner"] == "u"
 
 
 def test_migrate_setdefault_does_not_clobber_explicit_metadata(tmp_path, monkeypatch):

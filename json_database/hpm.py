@@ -72,15 +72,19 @@ class JsonDB(AbstractDB):
         left untouched.
 
         v1 -> v2: fold each record's top-level ``intent_blacklist`` /
-        ``skill_blacklist`` / ``message_blacklist`` values into the
-        record's ``metadata`` dict (``setdefault`` — explicit metadata
-        values are never clobbered), then remove the legacy top-level
-        keys. The store is committed once at the end.
+        ``skill_blacklist`` values into the record's ``metadata`` dict
+        (``setdefault`` — explicit metadata values are never clobbered),
+        then remove the legacy top-level keys. ``message_blacklist`` is
+        **purged without carry-forward** — the field was a 2024-12-20
+        design mistake that contradicted the deny-by-default whitelist
+        model and was removed from the Client data model in HPM. Any
+        residual ``metadata["message_blacklist"]`` from a prior
+        migration run is also stripped. The store is committed once at
+        the end.
         """
         if from_version >= 2:
             return
-        legacy_keys = ("intent_blacklist", "skill_blacklist",
-                       "message_blacklist")
+        legacy_keys = ("intent_blacklist", "skill_blacklist")
         changed_any = False
         for client_id, record in list(self._db.items()):
             if not isinstance(record, dict):
@@ -88,6 +92,12 @@ class JsonDB(AbstractDB):
             metadata = record.get("metadata") if isinstance(
                 record.get("metadata"), dict) else {}
             changed = False
+            # Strip message_blacklist outright (top-level + metadata).
+            if "message_blacklist" in record:
+                record.pop("message_blacklist", None)
+                changed = True
+            if metadata.pop("message_blacklist", None) is not None:
+                changed = True
             for lk in legacy_keys:
                 if lk in record:
                     val = record.pop(lk)
