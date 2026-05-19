@@ -1,11 +1,12 @@
 # Changelog
 
-## [Unreleased](https://github.com/TigreGotico/json_database/tree/HEAD)
+## [0.10.4a2](https://github.com/TigreGotico/json_database/tree/0.10.4a2) (2026-05-19)
 
-[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.2a1...HEAD)
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.2a1...0.10.4a2)
 
 **Merged pull requests:**
 
+- ci: migrate all release/publish automation onto OpenVoiceOS/gh-automations [\#29](https://github.com/TigreGotico/json_database/pull/29) ([JarbasAl](https://github.com/JarbasAl))
 - fix\(hpm\): break aliasing in JsonDB.add\_item + tests [\#26](https://github.com/TigreGotico/json_database/pull/26) ([JarbasAl](https://github.com/JarbasAl))
 - fix: implement tombstone-based stable IDs and fix key resolution with case-insensitivity and improve performance [\#23](https://github.com/TigreGotico/json_database/pull/23) ([JarbasAl](https://github.com/JarbasAl))
 - chore: test coverage improvements + comprehensive docs [\#21](https://github.com/TigreGotico/json_database/pull/21) ([JarbasAl](https://github.com/JarbasAl))
