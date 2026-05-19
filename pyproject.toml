@@ -16,6 +16,16 @@ dependencies = [
 
 [project.optional-dependencies]
 crypto = ["pycryptodomex"]
+# Back-compat shim for the 1.x line — ``json_database[hpm]`` keeps
+# resolving to a working install of the HiveMind database plugin so
+# existing ``pip install json_database[hpm]`` users don't break on
+# upgrade. The adapter itself was extracted into
+# https://github.com/JarbasHiveMind/hivemind-json-db-plugin; this
+# extra simply pulls it in transitively so the
+# ``hivemind-json-db-plugin`` entry point remains available.
+# This extra will be REMOVED in 2.0.0 — migrate to
+# ``pip install hivemind-json-db-plugin`` directly.
+hpm = ["hivemind-json-db-plugin"]
 test = [
     "coveralls>=1.8.2",
     "flake8>=3.7.9",
@@ -27,12 +37,6 @@ test = [
 
 [project.urls]
 Homepage = "https://github.com/TigreGotico/json_database"
-
-# NOTE: the HiveMind database-plugin adapter that used to live here as
-# ``json_database.hpm:JsonDB`` was extracted into its own package:
-# https://github.com/JarbasHiveMind/hivemind-json-db-plugin
-# Install ``hivemind-json-db-plugin`` if you need the
-# ``hivemind.database`` entry-point binding.
 
 [tool.setuptools.packages.find]
 where = ["."]

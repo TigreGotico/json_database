@@ -94,8 +94,13 @@ The HiveMind database-plugin adapter that used to ship as
 `json_database.hpm:JsonDB` has been extracted into its own package,
 [`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin),
 so it can release on a HiveMind-aligned cadence and `json_database` doesn't pull
-in `hivemind-plugin-manager` for users who don't need it. Install that package
-if you need the `hivemind.database` entry-point binding.
+in `hivemind-plugin-manager` for users who don't need it.
+
+For the 1.x line, `pip install json_database[hpm]` continues to work — it now
+transitively installs `hivemind-json-db-plugin` so the `hivemind.database`
+entry point remains available without code changes. **The `[hpm]` extra will
+be removed in 2.0.0;** users should migrate to
+`pip install hivemind-json-db-plugin` directly.
 
 ## License
 

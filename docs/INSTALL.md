@@ -48,8 +48,23 @@ pycryptodomex`.
 The HiveMind plugin previously bundled here as `json_database.hpm` was
 extracted into its own package,
 [`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin).
-Install that package if you need the `hivemind.database` entry-point binding —
-it pulls in `hivemind-plugin-manager` as a transitive dependency.
+Install that package directly:
+
+```bash
+pip install hivemind-json-db-plugin
+```
+
+For the 1.x line, the legacy `[hpm]` extra is preserved as a transitive
+shim — `pip install json_database[hpm]` keeps resolving to a working
+install of `hivemind-json-db-plugin`, so the `hivemind.database`
+entry point remains available without code changes:
+
+```bash
+pip install "json_database[hpm]"   # back-compat — still works in 1.x
+```
+
+The `[hpm]` extra will be **removed in 2.0.0**; existing users should
+migrate to the direct install before then.
 
 ## Verifying the Install
 
