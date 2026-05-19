@@ -14,3 +14,7 @@ jobs:
       install_extras: 'test'
       test_path: 'test'
       pr_comment: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # TEMPORARY: hivemind-plugin-manager#27 ships the SCHEMA_VERSION
+      # constant + migrate() hook this migration relies on. Drop once
+      # the next HPM release is on PyPI.
+      pre_install_pip: '"hivemind-plugin-manager @ git+https://github.com/JarbasHiveMind/hivemind-plugin-manager@feat/policy-plugins"'

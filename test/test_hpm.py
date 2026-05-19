@@ -1,3 +1,5 @@
+import os
+
 from hivemind_plugin_manager.database import Client
 
 import json_database.hpm as hpm
@@ -156,9 +158,11 @@ def test_add_item_snapshots_list_fields_against_caller_mutation(tmp_path, monkey
     client.allowed_types.append("speak:leaked")
 
     found = db.search_by_value("api_key", "k")
+    # Skill/intent surface via property shims (read from metadata).
+    # message_blacklist has no read-side shim — fetch via metadata.
     assert found[0].intent_blacklist == ["skill:a"]
     assert found[0].skill_blacklist == ["skill:b"]
-    assert found[0].message_blacklist == ["msg:c"]
+    assert found[0].metadata.get("message_blacklist") == ["msg:c"]
     # allowed_types: __post_init__ guarantees "recognizer_loop:utterance" is
     # in the list, so verify the leaked entry isn't there.
     assert "speak:leaked" not in found[0].allowed_types
@@ -174,3 +178,99 @@ def test_add_item_overwrites_metadata_for_same_client_id(tmp_path, monkeypatch):
     found = db.search_by_value("api_key", "k")
     assert len(found) == 1
     assert found[0].metadata == {"v": "new", "extra": "x"}
+
+
+# ---------------------------------------------------------------------------
+# v1 -> v2 schema migration (legacy blacklist fields -> metadata)
+# ---------------------------------------------------------------------------
+
+
+def _seed_v1_record(db, *, with_explicit_metadata=False):
+    """Inject a v1-shape record (legacy keys at top level) bypassing
+    Client.__init__ migration, then commit so it's on disk for reload."""
+    record = {
+        "client_id": 7,
+        "api_key": "legacy-key",
+        "name": "alpha",
+        "intent_blacklist": ["i:1"],
+        "skill_blacklist": ["s:1"],
+        "message_blacklist": ["m:1"],
+        "allowed_types": [],
+        "metadata": {"owner": "u"},
+    }
+    if with_explicit_metadata:
+        record["metadata"]["skill_blacklist"] = ["explicit"]
+    db._db[7] = record
+    db._db.store()
+
+
+def test_migrate_folds_legacy_keys_into_metadata(tmp_path, monkeypatch):
+    db = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db)
+
+    db.migrate(from_version=1)
+
+    record = db._db[7]
+    assert "intent_blacklist" not in record
+    assert "skill_blacklist" not in record
+    assert "message_blacklist" not in record
+    assert record["metadata"]["owner"] == "u"
+    assert record["metadata"]["intent_blacklist"] == ["i:1"]
+    assert record["metadata"]["skill_blacklist"] == ["s:1"]
+    assert record["metadata"]["message_blacklist"] == ["m:1"]
+
+
+def test_migrate_setdefault_does_not_clobber_explicit_metadata(tmp_path, monkeypatch):
+    db = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db, with_explicit_metadata=True)
+
+    db.migrate(from_version=1)
+
+    assert db._db[7]["metadata"]["skill_blacklist"] == ["explicit"]
+
+
+def test_migrate_is_idempotent(tmp_path, monkeypatch):
+    db = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db)
+    db.migrate(from_version=1)
+    snapshot = dict(db._db[7])
+    db.migrate(from_version=1)  # second run is a no-op
+    assert db._db[7] == snapshot
+
+
+def test_migrate_skips_when_already_at_target(tmp_path, monkeypatch):
+    db = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db)
+    db.migrate(from_version=2)
+    assert "intent_blacklist" in db._db[7]
+
+
+def test_maybe_migrate_writes_schema_version_sentinel(tmp_path, monkeypatch):
+    db = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db)
+    db._maybe_migrate()
+    assert db._read_schema_version() == 2
+    # second call: no-op
+    db._maybe_migrate()
+    assert db._read_schema_version() == 2
+
+
+def test_post_init_runs_migration_on_existing_db(tmp_path, monkeypatch):
+    """End-to-end: a v1-shape DB on disk gets migrated automatically when
+    JsonDB opens it. Simulates an existing operator DB."""
+    # First open: seed a v1 record, do NOT bump schema_version sentinel.
+    db1 = make_db(tmp_path, monkeypatch)
+    _seed_v1_record(db1)
+    # Roll back the sentinel that _maybe_migrate just wrote, then
+    # rewrite the record to its v1 shape (the previous _maybe_migrate
+    # call already migrated it).
+    os.remove(db1._schema_version_path())
+    _seed_v1_record(db1)
+
+    # Re-open via a fresh JsonDB — should migrate.
+    db2 = make_db(tmp_path, monkeypatch)
+    assert db2._read_schema_version() == 2
+    # On-disk JSON coerces int keys to strings; pick the only record.
+    record = next(iter(db2._db.values()))
+    assert "intent_blacklist" not in record
+    assert record["metadata"]["intent_blacklist"] == ["i:1"]

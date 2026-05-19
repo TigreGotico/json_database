@@ -1,4 +1,6 @@
 import copy
+import json
+import os
 from hivemind_plugin_manager.database import Client, AbstractDB, cast2client
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
@@ -25,6 +27,83 @@ class JsonDB(AbstractDB):
                                       subfolder=self.subfolder,
                                       xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
+        self._maybe_migrate()
+
+    def _schema_version_path(self) -> str:
+        """Sibling file next to the JSON store, kept out-of-band so the
+        store's dict shape stays unchanged (keys are still client_ids).
+        """
+        return os.path.join(os.path.dirname(self._db.path),
+                            f"{self.name}.schema_version")
+
+    def _read_schema_version(self) -> int:
+        path = self._schema_version_path()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return int(f.read().strip() or "1")
+        except (FileNotFoundError, ValueError, OSError):
+            return 1
+
+    def _write_schema_version(self, version: int) -> None:
+        path = self._schema_version_path()
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(str(int(version)))
+        except OSError as e:
+            LOG.warning("JsonDB: failed to write schema_version sentinel: %s", e)
+
+    def _maybe_migrate(self) -> None:
+        """Run schema migration if the on-disk version is behind
+        ``SCHEMA_VERSION``. Tolerates older HPM that predates the constant.
+        """
+        target = getattr(AbstractDB, "SCHEMA_VERSION", 1)
+        stored = self._read_schema_version()
+        if stored < target:
+            LOG.info("JsonDB: migrating schema v%d -> v%d", stored, target)
+            self.migrate(from_version=stored)
+            self._write_schema_version(target)
+
+    def migrate(self, from_version: int) -> None:
+        """Migrate stored client records to the current ``SCHEMA_VERSION``.
+
+        Idempotent and crash-safe: a partial migration re-run produces
+        the same final state. A record with no legacy top-level keys is
+        left untouched.
+
+        v1 -> v2: fold each record's top-level ``intent_blacklist`` /
+        ``skill_blacklist`` / ``message_blacklist`` values into the
+        record's ``metadata`` dict (``setdefault`` — explicit metadata
+        values are never clobbered), then remove the legacy top-level
+        keys. The store is committed once at the end.
+        """
+        if from_version >= 2:
+            return
+        legacy_keys = ("intent_blacklist", "skill_blacklist",
+                       "message_blacklist")
+        changed_any = False
+        for client_id, record in list(self._db.items()):
+            if not isinstance(record, dict):
+                continue
+            metadata = record.get("metadata") if isinstance(
+                record.get("metadata"), dict) else {}
+            changed = False
+            for lk in legacy_keys:
+                if lk in record:
+                    val = record.pop(lk)
+                    changed = True
+                    if val and lk not in metadata:
+                        metadata[lk] = list(val) if isinstance(
+                            val, (list, tuple)) else val
+            if changed:
+                record["metadata"] = metadata
+                self._db[client_id] = record
+                changed_any = True
+        if changed_any:
+            try:
+                self._db.store()
+            except Exception as e:
+                LOG.error("JsonDB: failed to persist migration: %s", e)
 
     def sync(self):
         """update db from disk if needed"""
