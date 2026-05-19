@@ -9,7 +9,6 @@ jobs:
   release_preview:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     uses: OpenVoiceOS/gh-automations/.github/workflows/release-preview.yml@dev
-    secrets: inherit
     with:
       package_name: 'json_database'
       version_file: 'json_database/version.py'

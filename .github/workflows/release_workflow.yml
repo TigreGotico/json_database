@@ -9,7 +9,8 @@ jobs:
   publish_alpha:
     if: github.event.pull_request.merged == true
     uses: TigreGotico/gh-automations/.github/workflows/publish-alpha.yml@master
-    secrets: inherit
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     with:
       branch: 'dev'
       version_file: 'json_database/version.py'
