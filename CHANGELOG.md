@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2a1](https://github.com/TigreGotico/json_database/tree/1.0.2a1) (2026-06-20)
+
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/1.0.1a1...1.0.2a1)
+
+**Merged pull requests:**
+
+- fix: derive version dynamically from version.py [\#35](https://github.com/TigreGotico/json_database/pull/35) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.1a1](https://github.com/TigreGotico/json_database/tree/1.0.1a1) (2026-06-20)
 
 [Full Changelog](https://github.com/TigreGotico/json_database/compare/1.0.0a1...1.0.1a1)
