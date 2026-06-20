@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1a1](https://github.com/TigreGotico/json_database/tree/1.0.1a1) (2026-06-20)
+
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/1.0.0a1...1.0.1a1)
+
+**Merged pull requests:**
+
+- fix: pin hpm back-compat shim to a version that ships the entry point [\#33](https://github.com/TigreGotico/json_database/pull/33) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.0a1](https://github.com/TigreGotico/json_database/tree/1.0.0a1) (2026-05-19)
 
 [Full Changelog](https://github.com/TigreGotico/json_database/compare/0.10.4a2...1.0.0a1)
