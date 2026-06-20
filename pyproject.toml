@@ -25,7 +25,7 @@ crypto = ["pycryptodomex"]
 # ``hivemind-json-db-plugin`` entry point remains available.
 # This extra will be REMOVED in 2.0.0 — migrate to
 # ``pip install hivemind-json-db-plugin`` directly.
-hpm = ["hivemind-json-db-plugin"]
+hpm = ["hivemind-json-db-plugin>=0.0.3a2"]
 test = [
     "coveralls>=1.8.2",
     "flake8>=3.7.9",
