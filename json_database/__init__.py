@@ -93,15 +93,23 @@ class JsonStorage(dict):
         with self.lock:
             path = expanduser(path)
             if exists(path) and isfile(path):
-                self.clear()
+                # Parse into a scratch dict first. Only replace the current
+                # in-memory contents once parsing succeeds: a concurrent
+                # writer can leave the file transiently truncated/invalid
+                # (a "torn read"), and clearing self before the parse is
+                # known to succeed would permanently discard previously
+                # loaded settings for a purely transient error, with no
+                # way to recover them on a later, successful reload.
                 try:
                     config = load_commented_json(path)
-                    for key in config:
-                        self[key] = config[key]
-                    LOG.debug("Json {} loaded".format(path))
                 except Exception as e:
                     LOG.error("Error loading json '{}'".format(path))
                     LOG.error(repr(e))
+                    return
+                self.clear()
+                for key in config:
+                    self[key] = config[key]
+                LOG.debug("Json {} loaded".format(path))
             else:
                 LOG.debug("Json '{}' not defined, skipping".format(path))
 
