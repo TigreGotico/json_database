@@ -34,6 +34,27 @@ class TestJsonStorageErrorHandling:
         with pytest.raises(DatabaseNotCommitted):
             storage.reload()
 
+    def test_reload_survives_torn_write_then_recovers(self, tmp_path):
+        """A reload() hitting a transient torn/corrupted write (e.g. an
+        external editor caught mid-save) must not wipe out the last known
+        good settings, and a later valid write must be picked up normally.
+        """
+        db_file = tmp_path / "settings.json"
+        db_file.write_text(json.dumps({"volume": 5}))
+        storage = JsonStorage(str(db_file), disable_lock=True)
+        assert storage["volume"] == 5
+
+        # Simulate a torn read: file caught mid-write, content is invalid.
+        db_file.write_text('{"volume": 9, "unit"')
+        storage.reload()
+        # Previously loaded settings must survive a failed parse.
+        assert storage["volume"] == 5
+
+        # A later, valid write must be reflected normally.
+        db_file.write_text(json.dumps({"volume": 9}))
+        storage.reload()
+        assert storage["volume"] == 9
+
     def test_store_without_path(self, tmp_path):
         """Test store with no path set."""
         storage = JsonStorage("", disable_lock=True)
