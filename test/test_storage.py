@@ -390,3 +390,81 @@ class TestJsonStorage:
         with open(temp_db_path, 'r') as f:
             data = json.load(f)
         assert data == {}
+
+
+class TestJsonStorageAtomicWrite:
+    """store() must never leave a half-written file on disk."""
+
+    def test_crash_before_replace_keeps_original(self, temp_db_path,
+                                                 monkeypatch):
+        """A crash after the temp file is written keeps the old file intact."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["key"] = "original"
+        storage.store()
+
+        def boom(src, dst):
+            raise OSError("simulated power cut")
+
+        monkeypatch.setattr(os, "replace", boom)
+        storage["key"] = "new value"
+        with pytest.raises(OSError):
+            storage.store()
+
+        with open(temp_db_path, 'r') as f:
+            data = json.load(f)
+        assert data == {"key": "original"}
+
+    def test_crash_before_replace_leaves_no_temp_file(self, temp_db_path,
+                                                      monkeypatch):
+        """The temp file is cleaned up when the replace fails."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["key"] = "original"
+        storage.store()
+
+        def boom(src, dst):
+            raise OSError("simulated power cut")
+
+        monkeypatch.setattr(os, "replace", boom)
+        with pytest.raises(OSError):
+            storage.store()
+
+        folder = os.path.dirname(temp_db_path)
+        assert [f for f in os.listdir(folder) if f.startswith(".tmp_")] == []
+
+    def test_store_writes_through_replace(self, temp_db_path, monkeypatch):
+        """The destination is only ever touched by os.replace."""
+        calls = []
+        real_replace = os.replace
+
+        def spy(src, dst):
+            calls.append((src, dst))
+            real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", spy)
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+
+        assert len(calls) == 1
+        assert calls[0][1] == temp_db_path
+        assert os.path.dirname(calls[0][0]) == os.path.dirname(temp_db_path)
+
+    def test_store_keeps_file_permissions(self, temp_db_path):
+        """Rewriting a file does not change its permissions."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        storage.store()
+        os.chmod(temp_db_path, 0o600)
+
+        storage["key"] = "value"
+        storage.store()
+
+        assert os.stat(temp_db_path).st_mode & 0o777 == 0o600
+
+    def test_stored_file_is_always_parseable(self, temp_db_path):
+        """Repeated stores of growing data always leave valid json."""
+        storage = JsonStorage(temp_db_path, disable_lock=True)
+        for i in range(20):
+            storage[f"key{i}"] = "x" * (i * 100)
+            storage.store()
+            with open(temp_db_path, 'r') as f:
+                assert json.load(f) == dict(storage)

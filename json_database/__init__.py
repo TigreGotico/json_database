@@ -4,7 +4,7 @@ import os
 from os import makedirs, remove
 from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
-from tempfile import gettempdir
+from tempfile import gettempdir, mkstemp
 
 from combo_lock import ComboLock
 
@@ -135,8 +135,41 @@ class JsonStorage(dict):
             path = expanduser(path)
             if dirname(path) and not isdir(dirname(path)):
                 makedirs(dirname(path))
-            with open(path, 'w', encoding="utf-8") as f:
-                json.dump(self, f, indent=4, ensure_ascii=False)
+            self._atomic_write(path, json.dumps(self, indent=4,
+                                                ensure_ascii=False))
+
+    @staticmethod
+    def _atomic_write(path, data):
+        """Replace the file at ``path`` with ``data`` in one step.
+
+        Writing directly into the destination truncates it before the new
+        content is on disk, so a power cut or a full disk leaves a
+        half-written file that no longer parses. Instead the data goes to a
+        temporary file in the same directory, is flushed all the way to the
+        disk, and then replaces the destination with ``os.replace``, which
+        is atomic. A reader always sees either the old file or the new one.
+        """
+        directory = dirname(path) or "."
+        if exists(path) and not os.access(path, os.W_OK):
+            # os.replace only needs write access to the directory, so a
+            # read-only destination would otherwise be overwritten. Refuse
+            # it, the same way a plain open(path, 'w') does.
+            raise PermissionError(f"file is not writable: {path}")
+        fd, tmp_path = mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            if exists(path):
+                # mkstemp creates the temp file 0600; keep the permissions
+                # the destination already had
+                os.chmod(tmp_path, os.stat(path).st_mode & 0o777)
+            os.replace(tmp_path, path)
+        except BaseException:
+            if exists(tmp_path):
+                remove(tmp_path)
+            raise
 
     def remove(self):
         with self.lock:
