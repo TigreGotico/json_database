@@ -148,9 +148,17 @@ class JsonStorage(dict):
         temporary file in the same directory, is flushed all the way to the
         disk, and then replaces the destination with ``os.replace``, which
         is atomic. A reader always sees either the old file or the new one.
+
+        The temporary file sits beside the destination until the replace,
+        so a store needs room for both copies. On a full partition even a
+        write that makes the file smaller can now fail.
         """
-        directory = dirname(path) or "."
-        if exists(path) and not os.access(path, os.W_OK):
+        # Follow the symlink and replace what it points at. os.replace on
+        # the link would put a regular file where the link was, quietly
+        # detaching the file the rest of the system shares.
+        real_path = os.path.realpath(path)
+        directory = dirname(real_path) or "."
+        if exists(real_path) and not os.access(real_path, os.W_OK):
             # os.replace only needs write access to the directory, so a
             # read-only destination would otherwise be overwritten. Refuse
             # it, the same way a plain open(path, 'w') does.
@@ -161,15 +169,30 @@ class JsonStorage(dict):
                 f.write(data)
                 f.flush()
                 os.fsync(f.fileno())
-            if exists(path):
+            if exists(real_path):
+                stat = os.stat(real_path)
                 # mkstemp creates the temp file 0600; keep the permissions
                 # the destination already had
-                os.chmod(tmp_path, os.stat(path).st_mode & 0o777)
-            os.replace(tmp_path, path)
+                os.chmod(tmp_path, stat.st_mode & 0o777)
+                if os.name == "posix" and os.geteuid() == 0:
+                    # os.replace keeps the temp file's owner, so a root run
+                    # would hand the file to root and lock the service that
+                    # owns it out. Only root can give a file away; for any
+                    # other user the owner cannot change anyway.
+                    os.chown(tmp_path, stat.st_uid, stat.st_gid)
+            os.replace(tmp_path, real_path)
         except BaseException:
             if exists(tmp_path):
                 remove(tmp_path)
             raise
+        if os.name == "posix":
+            # the rename itself is only on disk once the directory is
+            # flushed; without this a crash can bring back the old file
+            dir_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     def remove(self):
         with self.lock:

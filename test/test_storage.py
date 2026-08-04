@@ -468,3 +468,43 @@ class TestJsonStorageAtomicWrite:
             storage.store()
             with open(temp_db_path, 'r') as f:
                 assert json.load(f) == dict(storage)
+
+    def test_symlinked_destination_stays_a_symlink(self, tmp_path):
+        """A dotfile pointing at shared state must keep pointing at it.
+
+        ``~/.config/hivemind/_identity.json -> /mnt/state/identity.json`` is
+        a normal setup. Replacing the link with a regular file freezes the
+        shared file and nothing says so.
+        """
+        target = tmp_path / "shared.json"
+        target.write_text("{}")
+        link = tmp_path / "link.json"
+        link.symlink_to(target)
+
+        storage = JsonStorage(str(link), disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+
+        assert link.is_symlink()
+        assert json.loads(target.read_text()) == {"key": "value"}
+
+    @pytest.mark.skipif(os.name != "posix" or os.geteuid() != 0,
+                        reason="only root can give a file away")
+    def test_root_store_keeps_the_owner_of_the_file(self, tmp_path):
+        """`sudo hivemind-core add-client` must not hand the db to root.
+
+        os.replace keeps the temp file's owner, so without a chown the
+        unprivileged service that owns the file can no longer write it.
+        """
+        import pwd
+        owner = pwd.getpwnam("nobody")
+        db_file = tmp_path / "clients.json"
+        db_file.write_text("{}")
+        os.chown(db_file, owner.pw_uid, owner.pw_gid)
+
+        storage = JsonStorage(str(db_file), disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+
+        stat = os.stat(db_file)
+        assert (stat.st_uid, stat.st_gid) == (owner.pw_uid, owner.pw_gid)
