@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4a1](https://github.com/TigreGotico/json_database/tree/1.0.4a1) (2026-08-15)
+
+[Full Changelog](https://github.com/TigreGotico/json_database/compare/1.0.3a1...1.0.4a1)
+
+**Merged pull requests:**
+
+- fix: atomic writes in JsonStorage.store [\#39](https://github.com/TigreGotico/json_database/pull/39) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.3a1](https://github.com/TigreGotico/json_database/tree/1.0.3a1) (2026-07-23)
 
 [Full Changelog](https://github.com/TigreGotico/json_database/compare/1.0.2a1...1.0.3a1)
