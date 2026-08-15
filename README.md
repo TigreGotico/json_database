@@ -1,18 +1,13 @@
-# Json Database
+# json_database
 
-Python dict based database with persistence and search capabilities
+Searchable, persistent Python dict database backed by JSON files — for those
+times when SQL is overkill.
 
-For those times when you need something simple and sql is overkill
-
-
-## Features
-
-- pure python
-- save and load from file
-- search recursively by key and key/value pairs
-- fuzzy search
-- supports arbitrary objects
-- supports comments in saved files
+[![Unit Tests](https://github.com/TigreGotico/json_database/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/TigreGotico/json_database/actions/workflows/unit_tests.yml)
+[![codecov](https://codecov.io/gh/TigreGotico/json_database/branch/master/graph/badge.svg)](https://codecov.io/gh/TigreGotico/json_database)
+[![PyPI](https://img.shields.io/pypi/v/json_database)](https://pypi.org/project/json_database/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/json_database)](https://pypi.org/project/json_database/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Install
 
@@ -20,179 +15,93 @@ For those times when you need something simple and sql is overkill
 pip install json_database
 ```
 
+Encryption features additionally require `pycryptodomex`:
 
-## 📡 HiveMind Integration
-
-This project includes a native [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager) integration, providing seamless interoperability with the HiveMind ecosystem.
-- **Database Plugin**: Provides `hivemind-json-db-plugin` allowing to use JSON-based storage for client credentials and permissions
-  
-## 🐍 Usage
-
-
-### JsonStorage
-
-Sometimes you need persistent dicts that you can save and load from file
-
-```python
-from json_database import JsonStorage
-from os.path import exists
-
-save_path = "my_dict.conf"
-
-my_config = JsonStorage(save_path)
-
-my_config["lang"] = "pt"
-my_config["secondary_lang"] = "en"
-my_config["email"] = "jarbasai@mailfence.com"
-
-# my_config is a python dict
-assert isinstance(my_config, dict)
-
-# save to file
-my_config.store()
-
-my_config["lang"] = "pt-pt"
-
-# revert to previous saved file
-my_config.reload()
-assert my_config["lang"] == "pt"
-
-# clear all fields
-my_config.clear()
-assert my_config == {}
-
-# load from a specific path
-my_config.load_local(save_path)
-assert my_config == JsonStorage(save_path)
-
-# delete stored file
-my_config.remove()
-assert not exists(save_path)
-
-# keep working with dict in memory
-print(my_config)
+```bash
+pip install json_database pycryptodomex
 ```
 
-### JsonDatabase
-
-Ever wanted to search a dict?
-
-Let's create a dummy database with users
+## Quick Start
 
 ```python
-from json_database import JsonDatabase
+from json_database import JsonStorage, JsonDatabase
+from json_database.search import Query
 
-db_path = "users.db"
+# Persistent dict
+with JsonStorage("/tmp/config.json") as cfg:
+    cfg["host"] = "localhost"
+    cfg["port"] = 5432
+# auto-saved on exit
 
-with JsonDatabase("users", db_path) as db:
-    # add some users to the database
+# Searchable list-of-records
+with JsonDatabase("users", "/tmp/users.jsondb") as db:
+    db.add_item({"name": "Alice", "role": "admin"})
+    db.add_item({"name": "Bob",   "role": "user"})
 
-    for user in [
-        {"name": "bob", "age": 12},
-        {"name": "bobby"},
-        {"name": ["joe", "jony"]},
-        {"name": "john"},
-        {"name": "jones", "age": 35},
-        {"name": "joey", "birthday": "may 12"}]:
-        db.add_item(user)
-        
-    # pretty print database contents
-    db.print()
+admins = db.search_by_value("role", "admin")
 
-
-# auto saved when used with context manager
-# db.commit()
-
-
-```
-         
-search entries by key
-
-```python
-from json_database import JsonDatabase
-
-db_path = "users.db"
-
-db = JsonDatabase("users", db_path) # load db created in previous example
-
-# search by exact key match
-users_with_defined_age = db.search_by_key("age")
-
-for user in users_with_defined_age:
-    print(user["name"], user["age"])
-    
-# fuzzy search
-users = db.search_by_key("birth", fuzzy=True)
-for user, conf in users:
-    print("matched with confidence", conf)
-    print(user["name"], user["birthday"])
+# Fluent query builder
+results = Query(db).equal("role", "user").build()
 ```
 
-search by key value pair
+## Features
 
-```python
-# search by key/value pair
-users_12years_old = db.search_by_value("age", 12)
+- Pure Python, minimal dependencies (`combo_lock` only)
+- Persistent dict (`JsonStorage`) and list-of-records database (`JsonDatabase`)
+- Recursive search by key and key/value pair, with optional fuzzy matching
+- Fluent `Query` builder for multi-condition filtering
+- AES-256-GCM encryption at rest (`EncryptedJsonStorage`)
+- XDG Base Directory compliant variants for Linux applications
+- File locking via `combo_lock` for safe concurrent access
+- Supports commented JSON files (`//` and `#` line comments)
+- Arbitrary Python objects stored via automatic `jsonify_recursively` conversion
 
-for user in users_12years_old:
-    assert user["age"] == 12
+## Configuration / Key Options
 
-# fuzzy search
-jon_users = db.search_by_value("name", "jon", fuzzy=True)
-for user, conf in jon_users:
-    print(user["name"])
-    print("matched with confidence", conf)
-    # NOTE that one of the users has a list instead of a string in the name, it also matches
-```
+| Class | Default path | Use for |
+|---|---|---|
+| `JsonStorage(path)` | user-specified | any persistent dict |
+| `JsonStorageXDG(name)` | `~/.cache/json_database/{name}.json` | cache / temp data |
+| `JsonConfigXDG(name)` | `~/.config/json_database/{name}.json` | app settings |
+| `JsonDatabaseXDG(name)` | `~/.local/share/json_database/{name}.jsondb` | persistent records |
+| `EncryptedJsonStorage(key, path)` | user-specified | sensitive data at rest |
 
-updating an existing entry
+> **Note:** Item IDs in `JsonDatabase` are stable list indices. `add_item` and
+> `append` return the zero-based slot index of the new item. Removing an item
+> tombstones its slot rather than shifting subsequent IDs, so an ID obtained
+> from `add_item` or `get_item_id` remains valid for the lifetime of the
+> database file. Tombstoned slots are invisible to iteration, search,
+> `__contains__`, and `__len__`; accessing one via `db[item_id]` raises
+> `InvalidItemID`.
 
-```python
-# get database item
-item = {"name": "bobby"}
+> **Warning:** Encryption keys longer than 16 bytes are silently truncated to
+> 16 bytes. Always use exactly 16 bytes.
 
-item_id = db.get_item_id(item)
+## Documentation
 
-if item_id >= 0:
-    new_item = {"name": "don't call me bobby"}
-    db.update_item(item_id, new_item)
-else:
-    print("item not found in database")
+- [Installation](docs/INSTALL.md) — dependencies, Python version support
+- [Quick Start](docs/QUICKSTART.md) — 5-minute walkthrough with examples
+- [API Reference](docs/API.md) — all public classes and methods
+- [Encryption](docs/ENCRYPTION.md) — AES-GCM details, key rules, security notes
+- [XDG Paths](docs/XDG.md) — XDG spec support and path resolution
+- [Search and Query](docs/SEARCH.md) — all filter methods, fuzzy matching
+- [Development](docs/DEVELOPMENT.md) — running tests, CI, contributing
+- [Architecture](docs/ARCHITECTURE.md) — class hierarchy, data flow, design
 
-# clear changes since last commit
-db.reset()
-```
+## HiveMind Integration
 
-You can save arbitrary objects to the database
+The HiveMind database-plugin adapter that used to ship as
+`json_database.hpm:JsonDB` has been extracted into its own package,
+[`hivemind-json-db-plugin`](https://github.com/JarbasHiveMind/hivemind-json-db-plugin),
+so it can release on a HiveMind-aligned cadence and `json_database` doesn't pull
+in `hivemind-plugin-manager` for users who don't need it.
 
-```python
-from json_database import JsonDatabase
+For the 1.x line, `pip install json_database[hpm]` continues to work — it now
+transitively installs `hivemind-json-db-plugin` so the `hivemind.database`
+entry point remains available without code changes. **The `[hpm]` extra will
+be removed in 2.0.0;** users should migrate to
+`pip install hivemind-json-db-plugin` directly.
 
-db = JsonDatabase("users", "~/databases/users.json")
+## License
 
-
-class User:
-    def __init__(self, email, key=None, data=None):
-        self.email = email
-        self.secret_key = key
-        self.data = data
-
-user1 = User("first@mail.net", data={"name": "jonas", "birthday": "12 May"})
-user2 = User("second@mail.net", "secret", data={"name": ["joe", "jony"], "age": 12})
-
-# objects will be "jsonified" here, they will no longer be User objects
-# if you need them to be a specific class use some ORM lib instead (SQLAlchemy is great)
-db.add_item(user1)
-db.add_item(user2)
-
-# search entries with non empty key
-print(db.search_by_key("secret_key"))
-
-# search in user provided data
-print(db.search_by_key("birth", fuzzy=True))
-
-# search entries with a certain value
-print(db.search_by_value("age", 12))
-print(db.search_by_value("name", "jon", fuzzy=True))
-
-```
+MIT

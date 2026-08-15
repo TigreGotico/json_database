@@ -4,7 +4,7 @@ import os
 from os import makedirs, remove
 from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
-from tempfile import gettempdir
+from tempfile import gettempdir, mkstemp
 
 from combo_lock import ComboLock
 
@@ -19,10 +19,57 @@ from json_database.xdg_utils import xdg_cache_home, xdg_data_home, xdg_config_ho
 LOG = logging.getLogger("JsonDatabase")
 LOG.setLevel("INFO")
 
+# Tombstone sentinel stored in the JSON list when remove_item() is called.
+# Using a dict avoids collision with JSON null (None), which is a valid value.
+# The key is long and prefixed to minimise accidental collision with real data.
+_TOMBSTONE = {"__json_database_tombstone__": True}
+
+
+def _is_tombstone(item):
+    """Return True if item is a tombstone (revoked slot)."""
+    return (item is None or
+            (isinstance(item, dict)
+             and item.get("__json_database_tombstone__") is True))
+
 
 class JsonStorage(dict):
-    """
-    persistent python dict
+    """Persistent Python dictionary stored as JSON on disk.
+
+    A dict subclass that automatically loads and saves data to a JSON file.
+    Supports file locking for concurrent access and commented JSON loading.
+
+    Attributes:
+        path (str): File path where data is stored
+        lock: Lock object (ComboLock or DummyLock) for thread/process safety
+
+    Example:
+        storage = JsonStorage("config.json")
+        storage["key"] = "value"
+        storage.store()  # Save to disk
+
+        # Context manager auto-saves on exit
+        with JsonStorage("config.json") as storage:
+            storage["setting"] = 123
+
+    Aliasing semantics:
+        ``JsonStorage`` is a thin ``dict`` subclass — assignments via
+        ``storage[key] = value`` keep a reference to ``value``, not a copy.
+        Mutating the original object after assignment will be reflected in
+        the JSON written on the next ``store()`` call. This is by design
+        (matches plain ``dict`` semantics and supports the common pattern
+        of building a nested structure in place), but it means callers
+        passing in shared mutable objects must take their own snapshot if
+        they want isolation::
+
+            d = {"v": "original"}
+            storage["x"] = d
+            d["v"] = "mutated"
+            storage.store()  # writes {"v": "mutated"}, not {"v": "original"}
+
+        If you need automatic copy-on-assign semantics (caller state and
+        storage state independent), use ``JsonDatabase`` instead — its
+        mutation methods route inputs through ``jsonify_recursively`` which
+        rebuilds every container.
     """
 
     def __init__(self, path, disable_lock=False):
@@ -46,15 +93,23 @@ class JsonStorage(dict):
         with self.lock:
             path = expanduser(path)
             if exists(path) and isfile(path):
-                self.clear()
+                # Parse into a scratch dict first. Only replace the current
+                # in-memory contents once parsing succeeds: a concurrent
+                # writer can leave the file transiently truncated/invalid
+                # (a "torn read"), and clearing self before the parse is
+                # known to succeed would permanently discard previously
+                # loaded settings for a purely transient error, with no
+                # way to recover them on a later, successful reload.
                 try:
                     config = load_commented_json(path)
-                    for key in config:
-                        self[key] = config[key]
-                    LOG.debug("Json {} loaded".format(path))
                 except Exception as e:
                     LOG.error("Error loading json '{}'".format(path))
                     LOG.error(repr(e))
+                    return
+                self.clear()
+                for key in config:
+                    self[key] = config[key]
+                LOG.debug("Json {} loaded".format(path))
             else:
                 LOG.debug("Json '{}' not defined, skipping".format(path))
 
@@ -80,8 +135,64 @@ class JsonStorage(dict):
             path = expanduser(path)
             if dirname(path) and not isdir(dirname(path)):
                 makedirs(dirname(path))
-            with open(path, 'w', encoding="utf-8") as f:
-                json.dump(self, f, indent=4, ensure_ascii=False)
+            self._atomic_write(path, json.dumps(self, indent=4,
+                                                ensure_ascii=False))
+
+    @staticmethod
+    def _atomic_write(path, data):
+        """Replace the file at ``path`` with ``data`` in one step.
+
+        Writing directly into the destination truncates it before the new
+        content is on disk, so a power cut or a full disk leaves a
+        half-written file that no longer parses. Instead the data goes to a
+        temporary file in the same directory, is flushed all the way to the
+        disk, and then replaces the destination with ``os.replace``, which
+        is atomic. A reader always sees either the old file or the new one.
+
+        The temporary file sits beside the destination until the replace,
+        so a store needs room for both copies. On a full partition even a
+        write that makes the file smaller can now fail.
+        """
+        # Follow the symlink and replace what it points at. os.replace on
+        # the link would put a regular file where the link was, quietly
+        # detaching the file the rest of the system shares.
+        real_path = os.path.realpath(path)
+        directory = dirname(real_path) or "."
+        if exists(real_path) and not os.access(real_path, os.W_OK):
+            # os.replace only needs write access to the directory, so a
+            # read-only destination would otherwise be overwritten. Refuse
+            # it, the same way a plain open(path, 'w') does.
+            raise PermissionError(f"file is not writable: {path}")
+        fd, tmp_path = mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            if exists(real_path):
+                stat = os.stat(real_path)
+                # mkstemp creates the temp file 0600; keep the permissions
+                # the destination already had
+                os.chmod(tmp_path, stat.st_mode & 0o777)
+                if os.name == "posix" and os.geteuid() == 0:
+                    # os.replace keeps the temp file's owner, so a root run
+                    # would hand the file to root and lock the service that
+                    # owns it out. Only root can give a file away; for any
+                    # other user the owner cannot change anyway.
+                    os.chown(tmp_path, stat.st_uid, stat.st_gid)
+            os.replace(tmp_path, real_path)
+        except BaseException:
+            if exists(tmp_path):
+                remove(tmp_path)
+            raise
+        if os.name == "posix":
+            # the rename itself is only on disk once the directory is
+            # flushed; without this a crash can bring back the old file
+            dir_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     def remove(self):
         with self.lock:
@@ -107,7 +218,30 @@ class JsonStorage(dict):
 
 
 class EncryptedJsonStorage(JsonStorage):
-    """persistent python dict, stored AES encrypted to file"""
+    """Encrypted persistent Python dictionary using AES-GCM encryption.
+
+    Extends JsonStorage to encrypt data with AES-256-GCM (symmetric encryption).
+    Data is decrypted in memory but stored encrypted on disk.
+
+    **WARNING:** Keys must be exactly 16 bytes; any other length raises AssertionError.
+    **WARNING:** Item IDs (indices) are not stable across sessions.
+
+    Attributes:
+        encrypt_key (str): Encryption key (must be exactly 16 bytes)
+
+    Raises:
+        AssertionError: If encrypt_key is not exactly 16 bytes
+
+    Example:
+        key = "1234567890123456"  # 16 bytes
+        storage = EncryptedJsonStorage(key, "secret.json")
+        storage["password"] = "mypassword"
+        storage.store()  # Stored encrypted on disk
+
+        # Reload decrypts automatically
+        storage2 = EncryptedJsonStorage(key, "secret.json")
+        print(storage2["password"])  # "mypassword"
+    """
 
     def __init__(self, encrypt_key: str, path: str, disable_lock=False):
         assert len(encrypt_key) == 16
@@ -142,7 +276,42 @@ class EncryptedJsonStorage(JsonStorage):
 
 
 class JsonDatabase(dict):
-    """ searchable persistent dict """
+    """Searchable persistent list-of-records database backed by JSON.
+
+    A dict-like database that stores a list of records (items) and provides
+    search, filtering, and CRUD operations. All changes must be committed
+    to disk with commit() or via context manager.
+
+    **WARNING:** Item IDs are indices and shift when items are removed.
+    Do not persist item IDs across sessions.
+
+    Attributes:
+        name (str): Database name (dict key in JSON file)
+        path (str): File path where database is stored
+        db (JsonStorage): Underlying storage
+
+    Example:
+        db = JsonDatabase("users", path="db.json")
+        db.add_item({"id": 1, "name": "Alice"})
+        db.add_item({"id": 2, "name": "Bob"})
+
+        # Search and filter
+        from json_database.search import Query
+        query = Query(db).equal("name", "Alice")
+        results = query.build()
+
+        db.commit()  # Save to disk
+
+    Aliasing semantics:
+        Unlike ``JsonStorage``, ``JsonDatabase`` mutation methods
+        (``add_item``, ``append``, ``merge_item``, ``replace_item``,
+        ``update_item``, ``__setitem__``) route input through
+        ``jsonify_recursively`` (`utils.py:314`), which rebuilds every
+        nested ``dict`` and ``list``. Records stored in the database are
+        therefore independent of the caller-side objects passed in —
+        mutating the original after insertion has no effect on the stored
+        record.
+    """
 
     def __init__(self,
                  name,
@@ -152,9 +321,13 @@ class JsonDatabase(dict):
         super().__init__()
         self.name = name
         self.path = path or f"{name}.{extension}"
+        self._active_count = 0
         self.db = JsonStorage(self.path, disable_lock=disable_lock)
         self.db[name] = []
         self.db.load_local(self.path)
+        self._active_count = sum(
+            1 for item in self.db.get(name, []) if not _is_tombstone(item)
+        )
 
     # operator overloads
     def __enter__(self):
@@ -173,7 +346,7 @@ class JsonDatabase(dict):
         return str(jsonify_recursively(self))
 
     def __len__(self):
-        return len(self.db.get(self.name, []))
+        return self._active_count
 
     def __getitem__(self, item):
         if not isinstance(item, int):
@@ -185,19 +358,22 @@ class JsonDatabase(dict):
                     raise InvalidItemID
         else:
             item_id = item
-        if item_id >= len(self.db[self.name]):
+        raw = self.db[self.name]
+        if item_id >= len(raw) or _is_tombstone(raw[item_id]):
             raise InvalidItemID
-        return self.db[self.name][item_id]
+        return raw[item_id]
 
     def __setitem__(self, item_id, value):
-        if not isinstance(item_id, int) or item_id >= len(self) or item_id < 0:
+        raw = self.db[self.name]
+        if (not isinstance(item_id, int) or item_id < 0
+                or item_id >= len(raw) or _is_tombstone(raw[item_id])):
             raise InvalidItemID
-        else:
-            self.update_item(item_id, value)
+        self.update_item(item_id, value)
 
     def __iter__(self):
         for item in self.db[self.name]:
-            yield item
+            if not _is_tombstone(item):
+                yield item
 
     def __contains__(self, item):
         item = jsonify_recursively(item)
@@ -212,6 +388,9 @@ class JsonDatabase(dict):
 
     def reset(self):
         self.db.reload()
+        self._active_count = sum(
+            1 for item in self.db.get(self.name, []) if not _is_tombstone(item)
+        )
 
     def print(self):
         pprint(jsonify_recursively(self))
@@ -220,16 +399,17 @@ class JsonDatabase(dict):
     def append(self, value):
         value = jsonify_recursively(value)
         self.db[self.name].append(value)
-        return len(self)
+        self._active_count += 1
+        return len(self.db[self.name]) - 1
 
     def add_item(self, value, allow_duplicates=False):
         """ add an item to database
          if allow_duplicates is True, item is added unconditionally,
          else only if no exact match is present
+         Returns the item_id (raw slot index) of the added or existing item.
          """
         if allow_duplicates or value not in self:
-            self.append(value)
-            return len(self)
+            return self.append(value)
         return self.get_item_id(value)
 
     def match_item(self, value, match_strategy=None):
@@ -238,7 +418,9 @@ class JsonDatabase(dict):
         """
         value = jsonify_recursively(value)
         matches = []
-        for idx, item in enumerate(self):
+        for idx, item in enumerate(self.db[self.name]):
+            if _is_tombstone(item):
+                continue
 
             # TODO match strategy
             # - require exact match
@@ -259,7 +441,7 @@ class JsonDatabase(dict):
             matches = self.match_item(value, match_strategy)
             if not matches:
                 raise MatchError
-            match, item_id = matches[0][1]
+            match, item_id = matches[0]
         else:
             match = self[item_id]
         # TODO merge strategy
@@ -276,51 +458,70 @@ class JsonDatabase(dict):
             matches = self.match_item(value, match_strategy)
             if not matches:
                 raise MatchError
-            match, item_id = matches[0][1]
+            match, item_id = matches[0]
         value = jsonify_recursively(value)
         self[item_id] = value
 
     # item_id
     def get_item_id(self, item):
-        """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
+        """Return the stable list index of item, or -1 if not found."""
         for match, idx in self.match_item(item):
             return idx
         return -1
 
     def update_item(self, item_id, new_item):
-        """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
+        """Replace the item at item_id with new_item (stable index)."""
         new_item = jsonify_recursively(new_item)
         self.db[self.name][item_id] = new_item
 
     def remove_item(self, item_id):
+        """Mark item_id as revoked (tombstone sentinel).
+
+        The slot is retained so all subsequent item IDs remain stable.
+        Revoked entries are invisible to iteration, search, and __contains__.
+        Accessing a revoked slot via __getitem__ raises InvalidItemID.
         """
-        item_id is simply the index of the item in the database
-        WARNING: this is not immutable across sessions
-        """
-        return self.db[self.name].pop(item_id)
+        if item_id < 0 or item_id >= len(self.db[self.name]):
+            raise InvalidItemID
+        if not _is_tombstone(self.db[self.name][item_id]):
+            self._active_count -= 1
+        self.db[self.name][item_id] = _TOMBSTONE
 
     # search
     def search_by_key(self, key, fuzzy=False, thresh=0.7, include_empty=False):
-        if fuzzy:
-            return get_key_recursively_fuzzy(self.db, key, thresh, not include_empty)
-        return get_key_recursively(self.db, key, not include_empty)
+        results = []
+        for item in self:  # skips tombstone slots
+            if not isinstance(item, dict):
+                continue
+            if fuzzy:
+                results += get_key_recursively_fuzzy(item, key, thresh, not include_empty)
+            else:
+                results += get_key_recursively(item, key, not include_empty)
+        return results
 
     def search_by_value(self, key, value, fuzzy=False, thresh=0.7):
-        if fuzzy:
-            return get_value_recursively_fuzzy(self.db, key, value, thresh)
-        return get_value_recursively(self.db, key, value)
+        results = []
+        for item in self:  # skips tombstone slots
+            if not isinstance(item, dict):
+                continue
+            if fuzzy:
+                results += get_value_recursively_fuzzy(item, key, value, thresh)
+            else:
+                results += get_value_recursively(item, key, value)
+        return results
 
 
 # XDG aware classes
 
 class JsonStorageXDG(JsonStorage):
-    """ xdg respectful persistent dicts """
+    """XDG-compliant persistent dictionary using system cache directory.
+
+    Stores data in XDG_CACHE_HOME/json_database/ following Linux XDG spec.
+    Useful for application cache and temporary data.
+
+    Example:
+        storage = JsonStorageXDG("cache")  # ~/.cache/json_database/cache.json
+    """
 
     def __init__(self,
                  name,
@@ -349,7 +550,16 @@ class EncryptedJsonStorageXDG(EncryptedJsonStorage):
 
 
 class JsonDatabaseXDG(JsonDatabase):
-    """ xdg respectful json database """
+    """XDG-compliant searchable database using system data directory.
+
+    Stores database in XDG_DATA_HOME/json_database/ following Linux XDG spec.
+    Useful for application data that should persist across reboots.
+
+    Example:
+        db = JsonDatabaseXDG("users")  # ~/.local/share/json_database/users.jsondb
+        db.add_item({"id": 1, "name": "Alice"})
+        db.commit()
+    """
 
     def __init__(self, name, xdg_folder=xdg_data_home(),
                  disable_lock=False, subfolder="json_database",
@@ -359,7 +569,16 @@ class JsonDatabaseXDG(JsonDatabase):
 
 
 class JsonConfigXDG(JsonStorageXDG):
-    """ xdg respectful config files, using json_storage.JsonStorageXDG """
+    """XDG-compliant config storage using system config directory.
+
+    Stores configuration in XDG_CONFIG_HOME/json_database/ following Linux XDG spec.
+    Useful for application settings and preferences.
+
+    Example:
+        config = JsonConfigXDG("myapp")  # ~/.config/json_database/myapp.json
+        config["theme"] = "dark"
+        config.store()
+    """
 
     def __init__(self, name, xdg_folder=xdg_config_home(),
                  disable_lock=False, subfolder="json_database",
