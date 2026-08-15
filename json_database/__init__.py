@@ -4,7 +4,7 @@ import os
 from os import makedirs, remove
 from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
-from tempfile import gettempdir
+from tempfile import gettempdir, mkstemp
 
 from combo_lock import ComboLock
 
@@ -135,8 +135,64 @@ class JsonStorage(dict):
             path = expanduser(path)
             if dirname(path) and not isdir(dirname(path)):
                 makedirs(dirname(path))
-            with open(path, 'w', encoding="utf-8") as f:
-                json.dump(self, f, indent=4, ensure_ascii=False)
+            self._atomic_write(path, json.dumps(self, indent=4,
+                                                ensure_ascii=False))
+
+    @staticmethod
+    def _atomic_write(path, data):
+        """Replace the file at ``path`` with ``data`` in one step.
+
+        Writing directly into the destination truncates it before the new
+        content is on disk, so a power cut or a full disk leaves a
+        half-written file that no longer parses. Instead the data goes to a
+        temporary file in the same directory, is flushed all the way to the
+        disk, and then replaces the destination with ``os.replace``, which
+        is atomic. A reader always sees either the old file or the new one.
+
+        The temporary file sits beside the destination until the replace,
+        so a store needs room for both copies. On a full partition even a
+        write that makes the file smaller can now fail.
+        """
+        # Follow the symlink and replace what it points at. os.replace on
+        # the link would put a regular file where the link was, quietly
+        # detaching the file the rest of the system shares.
+        real_path = os.path.realpath(path)
+        directory = dirname(real_path) or "."
+        if exists(real_path) and not os.access(real_path, os.W_OK):
+            # os.replace only needs write access to the directory, so a
+            # read-only destination would otherwise be overwritten. Refuse
+            # it, the same way a plain open(path, 'w') does.
+            raise PermissionError(f"file is not writable: {path}")
+        fd, tmp_path = mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            if exists(real_path):
+                stat = os.stat(real_path)
+                # mkstemp creates the temp file 0600; keep the permissions
+                # the destination already had
+                os.chmod(tmp_path, stat.st_mode & 0o777)
+                if os.name == "posix" and os.geteuid() == 0:
+                    # os.replace keeps the temp file's owner, so a root run
+                    # would hand the file to root and lock the service that
+                    # owns it out. Only root can give a file away; for any
+                    # other user the owner cannot change anyway.
+                    os.chown(tmp_path, stat.st_uid, stat.st_gid)
+            os.replace(tmp_path, real_path)
+        except BaseException:
+            if exists(tmp_path):
+                remove(tmp_path)
+            raise
+        if os.name == "posix":
+            # the rename itself is only on disk once the directory is
+            # flushed; without this a crash can bring back the old file
+            dir_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     def remove(self):
         with self.lock:
