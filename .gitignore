@@ -19,3 +19,8 @@ dist
 # Created by unit tests
 .pytest_cache/
 /.gtm/
+spec.md
+plan.md
+status.md
+audit.md
+implementation-notes.md

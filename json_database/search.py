@@ -1,11 +1,69 @@
 from json_database.utils import fuzzy_match, match_one
-from json_database import JsonDatabase
+from json_database import JsonDatabase, _is_tombstone  # noqa: F401 used in __init__
+
+
+def _resolve_key(record, key, ignore_case=False):
+    """Return the actual key in record that matches key.
+
+    With ignore_case=True, scans all keys for a case-insensitive match so
+    {"Name": "Alice"} is found by _resolve_key(record, "name", ignore_case=True).
+    Returns None if no matching key exists.
+    """
+    if key in record:
+        return key
+    if ignore_case:
+        kl = key.lower()
+        for k in record:
+            if isinstance(k, str) and k.lower() == kl:
+                return k
+    return None
+
+
+def _get_value(record, key, ignore_case=False):
+    """Return the value for key in record, resolving case-insensitively if needed."""
+    resolved = _resolve_key(record, key, ignore_case)
+    if resolved is None:
+        raise KeyError(key)
+    return record[resolved]
 
 
 class Query:
+    """Fluent filter builder for querying JsonDatabase items.
+
+    Provides chainable filter methods for searching and filtering database
+    records. Each method narrows the result set and returns self for chaining.
+
+    Attributes:
+        result (list): Current filtered results
+
+    Example:
+        from json_database.search import Query
+
+        db = JsonDatabase("products")
+        # ... add items ...
+
+        # Chain filters
+        query = Query(db)
+        results = (query
+                   .equal("category", "Electronics")
+                   .below("price", 100)
+                   .equal("in_stock", True)
+                   .build())
+
+        for item in results:
+            print(item["name"])
+    """
     def __init__(self, db):
+        """Initialize Query from database or single item.
+
+        Args:
+            db: JsonDatabase instance or dict to filter
+        """
         if isinstance(db, JsonDatabase):
-            self.result = list(db)
+            # Iterate the raw backing list directly, skipping tombstones, without
+            # going through __iter__ which applies additional protocol overhead.
+            raw = db.db[db.name]
+            self.result = [e for e in raw if not _is_tombstone(e)]
         else:
             self.result = [db]
 
@@ -27,83 +85,82 @@ class Query:
             self.result = after
         elif ignore_case:
             self.result = [a for a in self.result
-                           if a.get(key) or a.get(key.lower())]
+                           if _resolve_key(a, key, ignore_case=True) is not None]
         else:
-            self.result = [a for a in self.result if a.get(key)]
+            self.result = [a for a in self.result if key in a]
         return self
 
     def contains_value(self, key, value, fuzzy=False, thresh=0.75, ignore_case=False):
-        self.contains_key(key, ignore_case=ignore_case)
+        # Single-pass: key-presence and value-match are checked together.
+        after = []
         if fuzzy:
-            after = []
             for e in self.result:
-                if isinstance(e[key], str):
-                    if ignore_case:
-                        score = fuzzy_match(value.lower(), e[key].lower())
-                    else:
-                        score = fuzzy_match(value, e[key])
+                try:
+                    v = _get_value(e, key, ignore_case)
+                except KeyError:
+                    continue
+                if isinstance(v, str):
+                    score = fuzzy_match(value.lower(), v.lower()) if ignore_case else fuzzy_match(value, v)
                     if score > thresh:
                         after.append(e)
-                elif isinstance(e[key], list):
-                    if ignore_case:
-                        v, score = match_one(value.lower(),
-                                             [_.lower() for _ in e[key]])
-                    else:
-                        v, score = match_one(value, e[key])
-                    if score < thresh:
-                        continue
-                    after.append(e)
-                elif isinstance(e[key], dict):
-                    if ignore_case:
-                        v, score = match_one(value.lower(),
-                                             [_.lower() for _ in e[key].keys()])
-                    else:
-                        v, score = match_one(value, e[key])
-                    if score < thresh:
-                        continue
-                    after.append(e)
-            self.result = after
+                elif isinstance(v, list):
+                    _, score = (match_one(value.lower(), [_.lower() for _ in v])
+                                if ignore_case else match_one(value, v))
+                    if score >= thresh:
+                        after.append(e)
+                elif isinstance(v, dict):
+                    _, score = (match_one(value.lower(), [_.lower() for _ in v.keys()])
+                                if ignore_case else match_one(value, v))
+                    if score >= thresh:
+                        after.append(e)
         elif ignore_case and isinstance(value, str):
-            after = []
             for a in self.result:
-                if isinstance(a[key], str) and value.lower() in a[key].lower():
+                try:
+                    v = _get_value(a, key, ignore_case)
+                except KeyError:
+                    continue
+                if isinstance(v, str) and value.lower() in v.lower():
                     after.append(a)
-                elif value.lower() in a[key] or value in a[key]:
+                elif isinstance(v, (list, tuple, set)):
+                    # Safe membership check for iterables
+                    if value.lower() in [str(x).lower() for x in v]:
+                        after.append(a)
+                elif isinstance(v, dict) and value.lower() in [str(x).lower() for x in v.keys()]:
                     after.append(a)
-            self.result = after
         else:
-            self.result = [a for a in self.result if value in a[key]]
+            for a in self.result:
+                try:
+                    v = _get_value(a, key)
+                    # Only check membership for iterables and strings
+                    if isinstance(v, (str, list, tuple, set)):
+                        if value in v:
+                            after.append(a)
+                    elif isinstance(v, dict) and value in v.keys():
+                        after.append(a)
+                except (KeyError, TypeError):
+                    pass
+        self.result = after
         return self
 
     def value_contains(self, key, value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
         if ignore_case:
             after = []
-            value = str(value).lower()
+            sv = str(value).lower()
             for e in self.result:
-                if isinstance(e[key], str) and ignore_case:
-                    if value.lower() in e[key].lower():
+                v = _get_value(e, key, ignore_case)
+                if isinstance(v, str):
+                    if sv in v.lower():
                         after.append(e)
-                elif isinstance(e[key], list) and ignore_case:
-                    if value.lower() in [str(_).lower() for _ in e[key]]:
+                elif isinstance(v, list):
+                    if sv in [str(_).lower() for _ in v]:
                         after.append(e)
-                elif isinstance(e[key], dict) and ignore_case:
-                    if value.lower() in [str(_).lower() for _ in e[key].keys()]:
+                elif isinstance(v, dict):
+                    if sv in [str(_).lower() for _ in v.keys()]:
                         after.append(e)
-
-                elif isinstance(e[key], str):
-                    if value in e[key]:
-                        after.append(e)
-                elif isinstance(e[key], list):
-                    if value in [str(_) for _ in e[key]]:
-                        after.append(e)
-                elif isinstance(e[key], dict):
-                    if value in [str(_) for _ in e[key].keys()]:
-                        after.append(e)
-
             self.result = after
         else:
-            self.result = [e for e in self.result if value in e[key]]
+            self.result = [e for e in self.result if value in _get_value(e, key)]
         return self
 
     def value_contains_token(self, key, value, fuzzy=False, thresh=0.75, ignore_case=False):
@@ -111,17 +168,19 @@ class Query:
         after = []
         value = str(value)
         for e in self.result:
-            if isinstance(e[key], str):
+            v = _get_value(e, key, ignore_case)
+            if isinstance(v, str):
                 if fuzzy:
-                    _, score = match_one(value.lower(),
-                                         e[key].lower().split(" "))
+                    _, score = match_one(value.lower(), v.lower().split(" "))
                     if score > thresh:
                         after.append(e)
-                elif ignore_case and value.lower() in e[key].lower().split(" "):
+                elif ignore_case and value.lower() in v.lower().split(" "):
                     after.append(e)
-                elif value in e[key].split(" "):
+                elif value in v.split(" "):
                     after.append(e)
-            elif value in e[key]:
+            elif isinstance(v, (list, tuple, set)) and value in v:
+                after.append(e)
+            elif isinstance(v, dict) and value in v.keys():
                 after.append(e)
         self.result = after
         return self
@@ -130,40 +189,51 @@ class Query:
         self.contains_key(key, ignore_case=ignore_case)
         if ignore_case and isinstance(value, str):
             self.result = [a for a in self.result
-                           if a[key].lower() == value.lower()]
+                           if _get_value(a, key, ignore_case).lower() == value.lower()]
         else:
-            self.result = [a for a in self.result if a[key] == value]
+            self.result = [a for a in self.result if _get_value(a, key) == value]
         return self
 
     def below(self, key, value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
-        self.result = [a for a in self.result if a[key] < value]
+        self.result = [a for a in self.result if _get_value(a, key, ignore_case) < value]
         return self
 
     def above(self, key, value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
-        self.result = [a for a in self.result if a[key] > value]
+        self.result = [a for a in self.result if _get_value(a, key, ignore_case) > value]
         return self
 
     def below_or_equal(self, key, value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
-        self.result = [a for a in self.result if a[key] <= value]
+        self.result = [a for a in self.result if _get_value(a, key, ignore_case) <= value]
         return self
 
     def above_or_equal(self, key, value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
-        self.result = [a for a in self.result if a[key] >= value]
+        self.result = [a for a in self.result if _get_value(a, key, ignore_case) >= value]
         return self
 
     def in_range(self, key, min_value, max_value, ignore_case=False):
         self.contains_key(key, ignore_case=ignore_case)
-        self.result = [a for a in self.result if min_value < a[key] < max_value]
+        self.result = [a for a in self.result
+                       if min_value < _get_value(a, key, ignore_case) < max_value]
         return self
 
     def all(self):
+        """No-op filter that returns all items (identity).
+
+        Returns:
+            self for chaining
+        """
         return self
 
     def build(self):
+        """Return the current filtered result list.
+
+        Returns:
+            list: Filtered items matching all applied filters
+        """
         return self.result
 
 
