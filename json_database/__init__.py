@@ -134,7 +134,7 @@ class JsonStorage(dict):
                 return
             path = expanduser(path)
             if dirname(path) and not isdir(dirname(path)):
-                makedirs(dirname(path))
+                makedirs(dirname(path), exist_ok=True)
             self._atomic_write(path, json.dumps(self, indent=4,
                                                 ensure_ascii=False))
 

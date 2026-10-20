@@ -508,3 +508,17 @@ class TestJsonStorageAtomicWrite:
 
         stat = os.stat(db_file)
         assert (stat.st_uid, stat.st_gid) == (owner.pw_uid, owner.pw_gid)
+
+
+class TestStoreDirectoryRace:
+    """Another process may create the directory after the isdir check."""
+
+    def test_store_when_directory_appears_after_check(self, tmp_path, monkeypatch):
+        target = tmp_path / "apps" / "settings.json"
+        target.parent.mkdir()
+        monkeypatch.setattr("json_database.isdir", lambda _: False)
+        storage = JsonStorage(str(target), disable_lock=True)
+        storage["key"] = "value"
+        storage.store()
+        with open(target) as f:
+            assert json.load(f) == {"key": "value"}
