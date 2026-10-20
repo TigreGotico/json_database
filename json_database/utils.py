@@ -1,5 +1,9 @@
 import json
+import re
 from difflib import SequenceMatcher
+from functools import lru_cache
+
+_COMMENT_RE = re.compile(r'^\s*(//|#)')
 
 
 class DummyLock:
@@ -35,6 +39,7 @@ class DummyLock:
         pass
 
 
+@lru_cache(maxsize=4096)
 def fuzzy_match(x, against):
     """Perform a 'fuzzy' comparison between two strings.
     Returns:
@@ -150,15 +155,7 @@ def uncomment_json(commented_json_str):
         str: uncommented, legal JSON
     """
     lines = commented_json_str.splitlines()
-    # remove all comment lines, starting with // or #
-    nocomment = []
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("//") or stripped.startswith("#"):
-            continue
-        nocomment.append(line)
-
-    return " ".join(nocomment)
+    return "\n".join(line for line in lines if not _COMMENT_RE.match(line))
 
 
 def is_jsonifiable(thing):
@@ -167,14 +164,10 @@ def is_jsonifiable(thing):
             try:
                 json.loads(thing)
                 return True
-            except:
+            except (ValueError, TypeError):
                 pass
         else:
-            try:
-                thing.__dict__
-                return True
-            except:
-                pass
+            return hasattr(thing, '__dict__')
         return False
     return True
 
@@ -204,8 +197,8 @@ def get_key_recursively(search_dict, field, filter_None=True):
                     try:
                         if get_key_recursively(item.__dict__, field, filter_None):
                             fields_found.append(item)
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_key_recursively(item, field, filter_None)
 
@@ -241,8 +234,8 @@ def get_key_recursively_fuzzy(search_dict, field, thresh=0.6, filter_None=True):
                     try:
                         if get_key_recursively_fuzzy(item.__dict__, field, thresh, filter_None):
                             fields_found.append((item, score))
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_key_recursively_fuzzy(item, field, thresh, filter_None)
     return sorted(fields_found, key = lambda i: i[1],reverse=True)
@@ -272,8 +265,8 @@ def get_value_recursively(search_dict, field, target_value):
                     try:
                         if get_value_recursively(item.__dict__, field, target_value):
                             fields_found.append(item)
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_value_recursively(item, field, target_value)
 
@@ -310,8 +303,8 @@ def get_value_recursively_fuzzy(search_dict, field, target_value, thresh=0.6):
                         found = get_value_recursively_fuzzy(item.__dict__, field, target_value, thresh)
                         if len(found):
                             fields_found.append((item, found[0][1]))
-                    except:
-                        continue  # can't parse
+                    except AttributeError:
+                        continue  # item has no __dict__, skip
                 else:
                     fields_found += get_value_recursively_fuzzy(item, field, target_value, thresh)
 
@@ -319,22 +312,19 @@ def get_value_recursively_fuzzy(search_dict, field, target_value, thresh=0.6):
 
 
 def jsonify_recursively(thing):
+    if thing is None or isinstance(thing, (bool, int, float, str)):
+        return thing
     if isinstance(thing, list):
         jsonified = list(thing)
         for idx, item in enumerate(thing):
             jsonified[idx] = jsonify_recursively(item)
     elif isinstance(thing, dict):
-        try:
-            # can't import at top level to do proper check
-            jsonified = dict(thing.db)
-        except:
-            jsonified = dict(thing)
+        # JsonStorage-like objects expose their backing store via .db
+        jsonified = dict(thing.db) if hasattr(thing, 'db') else dict(thing)
         for key in jsonified.keys():
-            value = jsonified[key]
-            jsonified[key] = jsonify_recursively(value)
+            jsonified[key] = jsonify_recursively(jsonified[key])
+    elif hasattr(thing, '__dict__'):
+        jsonified = {k: jsonify_recursively(v) for k, v in vars(thing).items()}
     else:
-        try:
-            jsonified = thing.__dict__
-        except:
-            jsonified = thing
+        jsonified = thing
     return jsonified
