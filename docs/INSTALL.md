@@ -23,9 +23,9 @@ pip install -e .
 
 | Package | Version | Purpose |
 |---|---|---|
-| `combo_lock` | `>=0.2.1,<1.0.0` | Cross-process file locking for safe concurrent access |
+| `filelock` | `>=3.12` | Cross-process file locking for safe concurrent access |
 
-The lock dependency is mandatory. `combo_lock` creates a `.lock` file in the
+The lock dependency is mandatory. `filelock` creates a `.lock` file in the
 system temp directory alongside each database file.
 
 ## Optional Encryption Dependency

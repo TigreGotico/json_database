@@ -6,7 +6,7 @@ from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
 from tempfile import gettempdir, mkstemp
 
-from combo_lock import ComboLock
+from filelock import FileLock
 
 from json_database.crypto import decrypt_from_json, encrypt_as_json
 from json_database.exceptions import InvalidItemID, DatabaseNotCommitted, \
@@ -40,7 +40,7 @@ class JsonStorage(dict):
 
     Attributes:
         path (str): File path where data is stored
-        lock: Lock object (ComboLock or DummyLock) for thread/process safety
+        lock: Lock object (FileLock or DummyLock) for thread/process safety
 
     Example:
         storage = JsonStorage("config.json")
@@ -78,7 +78,8 @@ class JsonStorage(dict):
         if disable_lock:
             self.lock = DummyLock(lock_path)
         else:
-            self.lock = ComboLock(lock_path)
+            # Services that share a database can run as different users.
+            self.lock = FileLock(lock_path, mode=0o666)
         self.path = path
         if self.path:
             self.load_local(self.path)

@@ -19,13 +19,13 @@ JsonStorage(path: str, disable_lock: bool = False)
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `path` | `str` | required | Absolute or relative path to the JSON file. `~` is expanded. |
-| `disable_lock` | `bool` | `False` | When `True` a no-op `DummyLock` is used instead of `ComboLock`. Disable only when you are certain there is no concurrent access. |
+| `disable_lock` | `bool` | `False` | When `True` a no-op `DummyLock` is used instead of `FileLock`. Disable only when you are certain there is no concurrent access. |
 
 On construction the file is loaded immediately if it exists. If it does not
 exist the instance is an empty dict and no error is raised.
 
 A `.lock` file is placed in the system temp directory, named after the basename
-of `path` (e.g. `/tmp/mydb.json.lock`). `combo_lock` makes the lock safe across
+of `path` (e.g. `/tmp/mydb.json.lock`). `filelock` makes the lock safe across
 threads and OS processes.
 
 ### Methods
@@ -436,5 +436,5 @@ variant matches on string similarity.
 `json_database/utils.py:5`
 
 A lock that does nothing. Used when `disable_lock=True` is passed to any
-storage constructor. Implements the same interface as `combo_lock.ComboLock`
+storage constructor. Implements the lock interface the storage classes use
 (`acquire`, `release`, `__enter__`, `__exit__`).

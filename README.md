@@ -46,13 +46,13 @@ results = Query(db).equal("role", "user").build()
 
 ## Features
 
-- Pure Python, minimal dependencies (`combo_lock` only)
+- Pure Python, minimal dependencies (`filelock` only)
 - Persistent dict (`JsonStorage`) and list-of-records database (`JsonDatabase`)
 - Recursive search by key and key/value pair, with optional fuzzy matching
 - Fluent `Query` builder for multi-condition filtering
 - AES-256-GCM encryption at rest (`EncryptedJsonStorage`)
 - XDG Base Directory compliant variants for Linux applications
-- File locking via `combo_lock` for safe concurrent access
+- File locking via `filelock` for safe concurrent access
 - Supports commented JSON files (`//` and `#` line comments)
 - Arbitrary Python objects stored via automatic `jsonify_recursively` conversion
 

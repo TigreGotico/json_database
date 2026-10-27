@@ -3,7 +3,7 @@
 ## Design Goals
 
 - **Zero schema.** Records are plain Python dicts. No migrations, no ORM.
-- **Minimal dependencies.** Only `combo_lock` is required for core functionality.
+- **Minimal dependencies.** Only `filelock` is required for core functionality.
 - **Dict compatibility.** Storage classes are `dict` subclasses, so any code
   that works with a dict works with `JsonStorage`.
 - **Optional layers.** Encryption and XDG path resolution are opt-in; the core
@@ -51,7 +51,7 @@ store(path)
   └── json.dump(self, file, indent=4)    # writes full dict as JSON
 ```
 
-File locking wraps both `load_local` and `store` via `ComboLock` (or
+File locking wraps both `load_local` and `store` via `FileLock` (or
 `DummyLock`). The lock file lives in `/tmp/{basename}.lock`.
 
 ### Aliasing semantics
@@ -155,10 +155,12 @@ initial snapshot.
 
 ## Locking Strategy
 
-`ComboLock` (from the `combo_lock` package) provides both threading and
-multiprocessing safety via a combination of a threading lock and a lockfile.
-The lock file path is derived from the database file's basename and placed in
-the system temp directory.
+`FileLock` (from the `filelock` package) provides both threading and
+multiprocessing safety: each thread holds its own handle on the lock file, so
+threads of one process exclude each other as separate processes do. The lock
+file path is derived from the database file's basename and placed in the
+system temp directory. The lock file is writable by all users, because
+services that share a database can run as different users.
 
 `DummyLock` (`json_database/utils.py:5`) is a no-op drop-in used when
 `disable_lock=True`. Use only in single-threaded, single-process contexts.
