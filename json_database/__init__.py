@@ -6,7 +6,7 @@ from os.path import expanduser, isdir, dirname, exists, isfile, join
 from pprint import pprint
 from tempfile import gettempdir, mkstemp
 
-from combo_lock import ComboLock
+from json_database.lock import ComboLock
 
 from json_database.crypto import decrypt_from_json, encrypt_as_json
 from json_database.exceptions import InvalidItemID, DatabaseNotCommitted, \
